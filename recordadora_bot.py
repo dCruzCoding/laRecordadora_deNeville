@@ -91,6 +91,7 @@ def formatear_fecha_para_mensaje(fecha_iso):
     else:
         return fecha.strftime("%d %b %Y, %H:%M")
 
+
 # === HANDLERS ===
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -106,12 +107,15 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📜 *Comandos disponibles:*\n"
         "/start - Presentación\n"
         "/ayuda - Lista comandos\n"
-        "/recordar - Añade un recordatorio (formato: fecha \\* texto)\n"
-        "/lista - Ver recordatorios pendientes\n"
-        "/hecho id - Marcar recordatorio como hecho\n"
-        "/borrar id - Eliminar recordatorio",
-        parse_mode="Markdown" 
+        "/recordar - Añade un recordatorio. Formato: `fecha * texto` o solo `/recordar` para modo conversacional\n"
+        "/lista - Ver recordatorios pendientes y hechos\n"
+        "/hecho - Marcar recordatorios como hecho o pasarlos a pendiente. Puedes usar varios IDs separados por coma o espacio, p.ej.: `AG01, AG02`\n"
+        "/borrar - Eliminar recordatorios. Puedes borrar un ID, varios IDs separados por coma/espacio, o `hechos` para todos los hechos\n"
+        "/configuracion - Ajustar opciones como Modo Seguro (desactivar confirmaciones de eliminación/transformación) o resetear la base de datos\n"
+        "/cancelar - Cancelar la operación en curso (si estás en modo conversacional)",
+        parse_mode="Markdown"
     )
+
 
 async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Pendientes
@@ -132,6 +136,55 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mensaje += f"{id_} — {texto} ({fecha_str})\n"
 
     await update.message.reply_text(mensaje, parse_mode="Markdown")
+
+
+##################
+# Conversación para /configuracion
+
+# Guardamos las preferencias del modo seguro
+# Por defecto, las confirmaciones están activadas
+modo_seguro = {
+    "confirmar_eliminacion": True,
+    "confirmar_transformacion": True
+}
+
+CONFIGURACION = 0
+ESPERANDO_CONFIGURACION = 1
+
+async def configuracion_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    mensaje = (
+        "⚙️ *Configuración de La Recordadora*\n\n"
+        "1️⃣ Activar/desactivar confirmación al borrar: "
+        f"{'✅ Activada' if modo_seguro['confirmar_eliminacion'] else '❌ Desactivada'}\n"
+        "2️⃣ Activar/desactivar confirmación al marcar hecho/pendiente: "
+        f"{'✅ Activada' if modo_seguro['confirmar_transformacion'] else '❌ Desactivada'}\n"
+        "3️⃣ Resetear la base de datos (¡BORRAR TODOS LOS RECORDATORIOS!)\n\n"
+        "Escribe el número de la opción que quieres cambiar:"
+    )
+    await update.message.reply_text(mensaje, parse_mode="Markdown")
+    return ESPERANDO_CONFIGURACION
+
+async def configuracion_recibir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    opcion = update.message.text.strip()
+    if opcion == "1":
+        modo_seguro["confirmar_eliminacion"] = not modo_seguro["confirmar_eliminacion"]
+        estado = '✅ Activada' if modo_seguro["confirmar_eliminacion"] else '❌ Desactivada'
+        await update.message.reply_text(f"Confirmación al borrar {estado}.")
+    elif opcion == "2":
+        modo_seguro["confirmar_transformacion"] = not modo_seguro["confirmar_transformacion"]
+        estado = '✅ Activada' if modo_seguro["confirmar_transformacion"] else '❌ Desactivada'
+        await update.message.reply_text(f"Confirmación al marcar hecho/pendiente {estado}.")
+    elif opcion == "3":
+        await update.message.reply_text(
+            "⚠️ Esto borrará *todos* los recordatorios. Escribe 'sí' para confirmar o 'no' para cancelar.",
+            parse_mode="Markdown"
+        )
+        return ESPERANDO_CONFIGURACION  # Reusamos estado para confirmar reset
+    else:
+        await update.message.reply_text("Opción inválida. Escribe 1, 2 o 3.")
+        return ESPERANDO_CONFIGURACION
+
+    return ConversationHandler.END
 
 
 ##################
@@ -305,31 +358,43 @@ async def procesar_siguiente_id(update: Update, context: ContextTypes.DEFAULT_TY
     return CONFIRMAR_CAMBIO_ESTADO
 
 async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = update.message.text.lower().strip()
-    if texto not in ("sí", "si", "no"):
-        await update.message.reply_text("Por favor responde con 'sí' o 'no'.")
-        return CONFIRMAR_CAMBIO_ESTADO
-
     id_actual = context.user_data["id_actual"]
     estado_actual = context.user_data["estado_actual"]
 
-    if texto in ("sí", "si"):
+    # Si el modo seguro desactiva confirmaciones, aplicamos directamente
+    if not modo_seguro["confirmar_transformacion"]:
         nuevo_estado = 1 if estado_actual == 0 else 0
         conexion = sqlite3.connect("recordadora.db")
         cursor = conexion.cursor()
         cursor.execute("UPDATE recordatorios SET estado=? WHERE id=?", (nuevo_estado, id_actual))
         conexion.commit()
         conexion.close()
-
-        if nuevo_estado == 1:
-            await update.message.reply_text(f"✅ Recordatorio {id_actual} marcado como hecho.")
-        else:
-            await update.message.reply_text(f"↩️ Recordatorio {id_actual} pasado a pendiente.")
+        estado_texto = "marcado como hecho" if nuevo_estado == 1 else "pasado a pendiente"
+        await update.message.reply_text(f"✅ Recordatorio {id_actual} {estado_texto} sin confirmación.")
     else:
-        await update.message.reply_text(f"❌ Se dejó sin cambios el recordatorio {id_actual}.")
+        texto = update.message.text.lower().strip()
+        if texto not in ("sí", "si", "no"):
+            await update.message.reply_text("Por favor responde con 'sí' o 'no'.")
+            return CONFIRMAR_CAMBIO_ESTADO
+
+        if texto in ("sí", "si"):
+            nuevo_estado = 1 if estado_actual == 0 else 0
+            conexion = sqlite3.connect("recordadora.db")
+            cursor = conexion.cursor()
+            cursor.execute("UPDATE recordatorios SET estado=? WHERE id=?", (nuevo_estado, id_actual))
+            conexion.commit()
+            conexion.close()
+
+            if nuevo_estado == 1:
+                await update.message.reply_text(f"✅ Recordatorio {id_actual} marcado como hecho.")
+            else:
+                await update.message.reply_text(f"↩️ Recordatorio {id_actual} pasado a pendiente.")
+        else:
+            await update.message.reply_text(f"❌ Se dejó sin cambios el recordatorio {id_actual}.")
 
     context.user_data["indice_id_actual"] += 1
     return await procesar_siguiente_id(update, context)
+
 
 
 async def hecho_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -401,6 +466,31 @@ async def borrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return PREGUNTAR_QUÉ_BORRAR
 
 async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ids = context.user_data.get("ids_a_borrar", [])
+    if not ids:
+        await update.message.reply_text("No hay IDs válidos para borrar. Operación cancelada.")
+        return ConversationHandler.END
+
+    id_actual = ids.pop(0)
+
+    # Si el modo seguro desactiva confirmaciones, borramos directamente
+    if not modo_seguro["confirmar_eliminacion"]:
+        conexion = sqlite3.connect("recordadora.db")
+        cursor = conexion.cursor()
+        if id_actual == "HECHOS":
+            cursor.execute("DELETE FROM recordatorios WHERE estado=1")
+            await update.message.reply_text("✅ Todos los recordatorios hechos han sido borrados sin confirmación.")
+        else:
+            cursor.execute("DELETE FROM recordatorios WHERE id=?", (id_actual,))
+            await update.message.reply_text(f"✅ Recordatorio {id_actual} borrado sin confirmación.")
+        conexion.commit()
+        conexion.close()
+        if ids:
+            context.user_data["ids_a_borrar"] = ids
+            return await borrar_confirmar(update, context)  # procesar siguiente
+        return ConversationHandler.END
+
+    # Modo seguro activado: confirmación sí/no
     texto = update.message.text.lower().strip()
     if texto not in ("sí", "si", "no"):
         await update.message.reply_text("Por favor responde con 'sí' o 'no'.")
@@ -412,17 +502,19 @@ async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     conexion = sqlite3.connect("recordadora.db")
     cursor = conexion.cursor()
-
-    if context.user_data.get("borrar_objeto") == "hechos":
+    if id_actual == "HECHOS":
         cursor.execute("DELETE FROM recordatorios WHERE estado=1")
         await update.message.reply_text("✅ Todos los recordatorios hechos han sido borrados.")
     else:
-        ids = context.user_data.get("borrar_ids", [])
-        cursor.executemany("DELETE FROM recordatorios WHERE id=?", [(id_,) for id_ in ids])
-        await update.message.reply_text(f"✅ Recordatorios borrados: {', '.join(ids)}")
-
+        cursor.execute("DELETE FROM recordatorios WHERE id=?", (id_actual,))
+        await update.message.reply_text(f"✅ Recordatorio {id_actual} borrado.")
     conexion.commit()
     conexion.close()
+
+    # Procesar siguiente ID si hay más
+    if ids:
+        context.user_data["ids_a_borrar"] = ids
+        return await borrar_recibir_objeto(update, context)  # pedir confirmación siguiente
     return ConversationHandler.END
 
 
@@ -481,7 +573,13 @@ async def borrar_recibir_objeto(update: Update, context: ContextTypes.DEFAULT_TY
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    
+    configuracion_handler = ConversationHandler(
+        entry_points=[CommandHandler("configuracion", configuracion_start)],
+        states={ESPERANDO_CONFIGURACION: [MessageHandler(filters.TEXT & ~filters.COMMAND, configuracion_recibir)]},
+        fallbacks=[CommandHandler("cancelar", recordar_cancelar)],  # Reutilizamos la función de cancelar
+        per_message=False
+    )
+
     recordar_handler = ConversationHandler(
         entry_points=[CommandHandler("recordar", recordar_start)],
         states={
@@ -514,10 +612,11 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ayuda", ayuda))
     app.add_handler(CommandHandler("lista", lista))
+    app.add_handler(configuracion_handler)
     app.add_handler(recordar_handler)
     app.add_handler(hecho_handler)
     app.add_handler(borrar_handler)
-    
+
     print("🤖 La Recordadora está en marcha...")
     app.run_polling()
 
