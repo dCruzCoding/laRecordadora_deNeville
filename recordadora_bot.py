@@ -113,26 +113,6 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown" 
     )
 
-async def recordar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto_entrada = " ".join(context.args).strip()
-    texto, fecha_obj, error = parsear_recordatorio(texto_entrada)
-    if error:
-        await update.message.reply_text(error)
-        return
-
-    texto = texto.capitalize()
-    fecha_iso = fecha_obj.isoformat() if fecha_obj else None
-    nuevo_id = generar_id(fecha_obj or datetime.now())
-
-    cursor.execute(
-        "INSERT INTO recordatorios (id, texto, fecha_hora) VALUES (?, ?, ?)",
-        (nuevo_id, texto, fecha_iso)
-    )
-    conn.commit()
-
-    fecha_mensaje = formatear_fecha_para_mensaje(fecha_iso)
-    await update.message.reply_text(f"✅ Recordatorio guardado:\n» {texto}\n🆔 ID: {nuevo_id}\n⏰ Para el {fecha_mensaje}")
-
 async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Pendientes
     cursor.execute("SELECT id, texto, fecha_hora FROM recordatorios WHERE estado=0 ORDER BY fecha_hora")
@@ -152,6 +132,58 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mensaje += f"{id_} — {texto} ({fecha_str})\n"
 
     await update.message.reply_text(mensaje, parse_mode="Markdown")
+
+
+##################
+# Conversación para /recordar
+ESPERANDO_RECORDATORIO = 0   # Estados del conversation handler
+
+# --- Función para empezar /recordar ---
+async def recordar_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto_entrada = " ".join(context.args).strip()
+    if texto_entrada:
+        # Si hay argumentos, procesamos directamente
+        return await procesar_recordatorio(update, context, texto_entrada)
+    else:
+        # Modo conversacional
+        await update.message.reply_text(
+            "📝 Dime qué quieres recordar. Recuerda usar el formato: `fecha * texto`",
+            parse_mode="Markdown"
+        )
+        return ESPERANDO_RECORDATORIO
+
+# --- Función que recibe el mensaje del usuario ---
+async def recordar_recibir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    texto_entrada = update.message.text.strip()
+    return await procesar_recordatorio(update, context, texto_entrada)
+
+# --- Función que procesa un recordatorio (puede usarse desde args o conversación) ---
+async def procesar_recordatorio(update: Update, context: ContextTypes.DEFAULT_TYPE, texto_entrada: str):
+    texto, fecha_obj, error = parsear_recordatorio(texto_entrada)
+    if error:
+        await update.message.reply_text(error)
+        return ESPERANDO_RECORDATORIO  # Mantiene la conversación activa
+
+    texto = texto.capitalize()
+    fecha_iso = fecha_obj.isoformat() if fecha_obj else None
+    nuevo_id = generar_id(fecha_obj or datetime.now())
+
+    cursor.execute(
+        "INSERT INTO recordatorios (id, texto, fecha_hora) VALUES (?, ?, ?)",
+        (nuevo_id, texto, fecha_iso)
+    )
+    conn.commit()
+
+    fecha_mensaje = formatear_fecha_para_mensaje(fecha_iso)
+    await update.message.reply_text(
+        f"✅ Recordatorio guardado:\n» {texto}\n🆔 ID: {nuevo_id}\n⏰ Para el {fecha_mensaje}"
+    )
+    return ConversationHandler.END
+
+async def recordar_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("❌ Operación cancelada.")
+    return ConversationHandler.END
+
 
 ##################
 # Conversación para /hecho
@@ -442,19 +474,20 @@ async def borrar_recibir_objeto(update: Update, context: ContextTypes.DEFAULT_TY
     return CONFIRMAR_BORRADO
 
 
-
-# === MAIN ===
+##########################################################
+#                   === MAIN ===
+##########################################################
 
 def main():
     app = ApplicationBuilder().token(TOKEN).build()
 
-    borrar_handler = ConversationHandler(
-        entry_points=[CommandHandler("borrar", borrar_start)],
+    
+    recordar_handler = ConversationHandler(
+        entry_points=[CommandHandler("recordar", recordar_start)],
         states={
-            PREGUNTAR_QUÉ_BORRAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, borrar_recibir_objeto)],
-            CONFIRMAR_BORRADO: [MessageHandler(filters.Regex(r"(?i)^(sí|si|no)$"), borrar_confirmar)],
+            ESPERANDO_RECORDATORIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recordar_recibir)],
         },
-        fallbacks=[CommandHandler("cancelar", borrar_cancelar)],
+        fallbacks=[CommandHandler("cancelar", recordar_cancelar)],
         per_message=False
     )
 
@@ -468,14 +501,23 @@ def main():
         per_message=False
     )
 
+    borrar_handler = ConversationHandler(
+        entry_points=[CommandHandler("borrar", borrar_start)],
+        states={
+            PREGUNTAR_QUÉ_BORRAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, borrar_recibir_objeto)],
+            CONFIRMAR_BORRADO: [MessageHandler(filters.Regex(r"(?i)^(sí|si|no)$"), borrar_confirmar)],
+        },
+        fallbacks=[CommandHandler("cancelar", borrar_cancelar)],
+        per_message=False
+    )
 
-    app.add_handler(hecho_handler)
-    app.add_handler(borrar_handler)
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("ayuda", ayuda))
-    app.add_handler(CommandHandler("recordar", recordar))
     app.add_handler(CommandHandler("lista", lista))
-
+    app.add_handler(recordar_handler)
+    app.add_handler(hecho_handler)
+    app.add_handler(borrar_handler)
+    
     print("🤖 La Recordadora está en marcha...")
     app.run_polling()
 
