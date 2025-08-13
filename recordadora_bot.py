@@ -199,7 +199,6 @@ async def hecho_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mensaje, parse_mode="Markdown")
     return PREGUNTAR_ID_HECHO
 
-
 async def procesar_id_hecho(update: Update, context: ContextTypes.DEFAULT_TYPE, id_seleccionado: str):
     conexion = sqlite3.connect("recordadora.db")
     cursor = conexion.cursor()
@@ -208,21 +207,21 @@ async def procesar_id_hecho(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     conexion.close()
 
     if not fila:
-        await update.message.reply_text(f"❗ No encontré recordatorio con id {id_seleccionado}.")
-        return ConversationHandler.END
+        await update.message.reply_text(
+            f"❗ No encontré recordatorios con id \"{id_seleccionado}\".\nPor favor escriba un ID válido o escriba /cancelar para terminar la operación."
+        )
+        return PREGUNTAR_ID_HECHO  # Mantener conversación
 
     estado_actual = fila[0]
     context.user_data["hecho_id"] = id_seleccionado
     context.user_data["estado_actual"] = estado_actual
 
     if estado_actual == 0:
-        # Está pendiente → confirmar marcar como hecho
         await update.message.reply_text(
             f"⚠️ ¿Marcar el recordatorio {id_seleccionado} como *hecho*? (sí/no)",
             parse_mode="Markdown"
         )
     else:
-        # Está hecho → confirmar pasarlo a pendiente
         await update.message.reply_text(
             f"⚠️ El recordatorio {id_seleccionado} ya está hecho.\n¿Quieres pasarlo a *pendiente*? (sí/no)",
             parse_mode="Markdown"
@@ -232,9 +231,46 @@ async def procesar_id_hecho(update: Update, context: ContextTypes.DEFAULT_TYPE, 
 
 
 async def hecho_recibir_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    id_seleccionado = update.message.text.strip().upper()
-    return await procesar_id_hecho(update, context, id_seleccionado)
+    texto = update.message.text
+    # parsear varios IDs separados por coma o espacio
+    ids = [i.strip().upper() for i in texto.replace(',', ' ').split()]
+    context.user_data["ids_por_procesar"] = ids
+    context.user_data["indice_id_actual"] = 0  # índice del ID actual
+    return await procesar_siguiente_id(update, context)
 
+async def procesar_siguiente_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ids = context.user_data.get("ids_por_procesar", [])
+    indice = context.user_data.get("indice_id_actual", 0)
+
+    if indice >= len(ids):
+        await update.message.reply_text("✅ Todos los IDs han sido procesados.")
+        return ConversationHandler.END
+
+    id_actual = ids[indice]
+
+    conexion = sqlite3.connect("recordadora.db")
+    cursor = conexion.cursor()
+    cursor.execute("SELECT estado FROM recordatorios WHERE id=?", (id_actual,))
+    fila = cursor.fetchone()
+    conexion.close()
+
+    if not fila:
+        await update.message.reply_text(
+            f"❗ No encontré recordatorios con ID \"{id_actual}\".\nEscribe un ID válido o /cancelar para terminar."
+        )
+        context.user_data["indice_id_actual"] += 1
+        return await procesar_siguiente_id(update, context)
+
+    estado_actual = fila[0]
+    context.user_data["estado_actual"] = estado_actual
+    context.user_data["id_actual"] = id_actual
+
+    if estado_actual == 0:
+        await update.message.reply_text(f"⚠️ ¿Marcar el recordatorio {id_actual} como *hecho*? (sí/no)", parse_mode="Markdown")
+    else:
+        await update.message.reply_text(f"⚠️ El recordatorio {id_actual} ya está hecho.\n¿Pasarlo a pendiente? (sí/no)", parse_mode="Markdown")
+
+    return CONFIRMAR_CAMBIO_ESTADO
 
 async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower().strip()
@@ -242,26 +278,26 @@ async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("Por favor responde con 'sí' o 'no'.")
         return CONFIRMAR_CAMBIO_ESTADO
 
-    if texto in ("no",):
-        await update.message.reply_text("❌ Operación cancelada.")
-        return ConversationHandler.END
-
-    id_seleccionado = context.user_data["hecho_id"]
+    id_actual = context.user_data["id_actual"]
     estado_actual = context.user_data["estado_actual"]
 
-    nuevo_estado = 1 if estado_actual == 0 else 0  # alternar
-    conexion = sqlite3.connect("recordadora.db")
-    cursor = conexion.cursor()
-    cursor.execute("UPDATE recordatorios SET estado=? WHERE id=?", (nuevo_estado, id_seleccionado))
-    conexion.commit()
-    conexion.close()
+    if texto in ("sí", "si"):
+        nuevo_estado = 1 if estado_actual == 0 else 0
+        conexion = sqlite3.connect("recordadora.db")
+        cursor = conexion.cursor()
+        cursor.execute("UPDATE recordatorios SET estado=? WHERE id=?", (nuevo_estado, id_actual))
+        conexion.commit()
+        conexion.close()
 
-    if nuevo_estado == 1:
-        await update.message.reply_text(f"✅ Recordatorio {id_seleccionado} marcado como hecho.")
+        if nuevo_estado == 1:
+            await update.message.reply_text(f"✅ Recordatorio {id_actual} marcado como hecho.")
+        else:
+            await update.message.reply_text(f"↩️ Recordatorio {id_actual} pasado a pendiente.")
     else:
-        await update.message.reply_text(f"↩️ Recordatorio {id_seleccionado} pasado a pendiente.")
+        await update.message.reply_text(f"❌ Se dejó sin cambios el recordatorio {id_actual}.")
 
-    return ConversationHandler.END
+    context.user_data["indice_id_actual"] += 1
+    return await procesar_siguiente_id(update, context)
 
 
 async def hecho_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -334,7 +370,6 @@ async def borrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     texto = update.message.text.lower().strip()
-
     if texto not in ("sí", "si", "no"):
         await update.message.reply_text("Por favor responde con 'sí' o 'no'.")
         return CONFIRMAR_BORRADO
@@ -343,55 +378,70 @@ async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ Operación cancelada.")
         return ConversationHandler.END
 
-    # Aquí borramos según lo guardado en user_data
     conexion = sqlite3.connect("recordadora.db")
     cursor = conexion.cursor()
 
-    borrar_objeto = context.user_data.get("borrar_objeto")
-
-    if borrar_objeto == "hechos":
+    if context.user_data.get("borrar_objeto") == "hechos":
         cursor.execute("DELETE FROM recordatorios WHERE estado=1")
-        conexion.commit()
         await update.message.reply_text("✅ Todos los recordatorios hechos han sido borrados.")
     else:
-        # Borrar un ID concreto
-        cursor.execute("SELECT id FROM recordatorios WHERE id=?", (borrar_objeto,))
-        if cursor.fetchone() is None:
-            await update.message.reply_text(f"❗ No encontré recordatorio con id {borrar_objeto}.")
-            conexion.close()
-            return ConversationHandler.END
+        ids = context.user_data.get("borrar_ids", [])
+        cursor.executemany("DELETE FROM recordatorios WHERE id=?", [(id_,) for id_ in ids])
+        await update.message.reply_text(f"✅ Recordatorios borrados: {', '.join(ids)}")
 
-        cursor.execute("DELETE FROM recordatorios WHERE id=?", (borrar_objeto,))
-        conexion.commit()
-        await update.message.reply_text(f"✅ Recordatorio {borrar_objeto} borrado.")
-
+    conexion.commit()
     conexion.close()
     return ConversationHandler.END
 
+
 async def borrar_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Borrado cancelado.")
+    await update.message.reply_text("❌ Operación cancelada.")
     return ConversationHandler.END
 
 
 async def borrar_recibir_objeto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    texto = update.message.text.strip().lower()
+    texto = update.message.text.strip().upper()
 
-    if texto == "hechos":
-        context.user_data["borrar_objeto"] = "hechos"
-        await update.message.reply_text(
-            "⚠️ Estás a punto de borrar *todos* los recordatorios hechos.\n¿Estás seguro? Responde sí o no.",
-            parse_mode="Markdown"
-        )
-        return CONFIRMAR_BORRADO
+    # parsear varios IDs separados por coma o espacio
+    ids = [i.strip() for i in texto.replace(',', ' ').split()]
+    context.user_data["ids_a_borrar"] = ids
+    context.user_data["ids_invalidos"] = []
+    context.user_data["ids_validos"] = []
 
+    conexion = sqlite3.connect("recordadora.db")
+    cursor = conexion.cursor()
+
+    for id_ in ids:
+        if id_ == "HECHOS":
+            context.user_data["ids_validos"].append("HECHOS")
+            continue
+        cursor.execute("SELECT id FROM recordatorios WHERE id=?", (id_,))
+        if cursor.fetchone():
+            context.user_data["ids_validos"].append(id_)
+        else:
+            context.user_data["ids_invalidos"].append(id_)
+
+    conexion.close()
+
+    mensaje = ""
+    if context.user_data["ids_invalidos"]:
+        mensaje += f"❗ IDs no encontrados: {', '.join(context.user_data['ids_invalidos'])}\n"
+
+    if context.user_data["ids_validos"]:
+        proximo_id = context.user_data["ids_validos"].pop(0)
+        context.user_data["id_actual"] = proximo_id
+        if proximo_id == "HECHOS":
+            mensaje += "⚠️ Estás a punto de borrar *todos* los recordatorios hechos.\n¿Estás seguro? (sí/no)"
+        else:
+            mensaje += f"⚠️ Estás a punto de borrar el recordatorio {proximo_id}.\n¿Estás seguro? (sí/no)"
     else:
-        # Asumimos que es un ID
-        context.user_data["borrar_objeto"] = texto
-        await update.message.reply_text(
-            f"⚠️ Estás a punto de borrar el recordatorio con ID {texto.upper()}.\n¿Estás seguro? Responde sí o no.",
-            parse_mode="Markdown"
-        )
-        return CONFIRMAR_BORRADO
+        await update.message.reply_text("No hay IDs válidos para borrar. Operación cancelada.")
+        return ConversationHandler.END
+
+    await update.message.reply_text(mensaje, parse_mode="Markdown")
+    return CONFIRMAR_BORRADO
+
+
 
 # === MAIN ===
 
