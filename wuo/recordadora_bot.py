@@ -2,6 +2,7 @@ import sqlite3
 import re
 from dateparser.search import search_dates
 from datetime import datetime
+from avisos import programar_avisos, cancelar_avisos, scheduler
 from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes,
@@ -227,6 +228,11 @@ async def procesar_recordatorio(update: Update, context: ContextTypes.DEFAULT_TY
     )
     conn.commit()
 
+    # después de conn.commit() y antes de finalizar la función
+    if fecha_obj:  # si hay fecha válida
+        programar_avisos(context.bot, update.effective_chat.id, fecha_obj, nuevo_id, modo_tester=True)
+
+
     fecha_mensaje = formatear_fecha_para_mensaje(fecha_iso)
     await update.message.reply_text(
         f"✅ Recordatorio guardado:\n» {texto}\n🆔 ID: {nuevo_id}\n⏰ Para el {fecha_mensaje}"
@@ -369,8 +375,13 @@ async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         cursor.execute("UPDATE recordatorios SET estado=? WHERE id=?", (nuevo_estado, id_actual))
         conexion.commit()
         conexion.close()
+
         estado_texto = "marcado como hecho" if nuevo_estado == 1 else "pasado a pendiente"
         await update.message.reply_text(f"✅ Recordatorio {id_actual} {estado_texto} sin confirmación.")
+
+        if nuevo_estado == 1:  # si se marca como hecho, cancelamos avisos
+            cancelar_avisos(id_actual)
+
     else:
         texto = update.message.text.lower().strip()
         if texto not in ("sí", "si", "no"):
@@ -387,6 +398,7 @@ async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             if nuevo_estado == 1:
                 await update.message.reply_text(f"✅ Recordatorio {id_actual} marcado como hecho.")
+                cancelar_avisos(id_actual)
             else:
                 await update.message.reply_text(f"↩️ Recordatorio {id_actual} pasado a pendiente.")
         else:
@@ -394,6 +406,7 @@ async def hecho_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     context.user_data["indice_id_actual"] += 1
     return await procesar_siguiente_id(update, context)
+
 
 
 
@@ -421,8 +434,8 @@ async def borrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if args:
         # Si usuario escribió /borrar <algo>
-        peticion = args[0].lower()
-        if peticion == "hechos":
+        peticion = args[0].upper()
+        if peticion == "HECHOS":
             context.user_data["borrar_objeto"] = "hechos"
             await update.message.reply_text(
                 "⚠️ Estás a punto de borrar *todos* los recordatorios hechos.\n¿Estás seguro? Responde sí o no.",
@@ -480,9 +493,14 @@ async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if id_actual == "HECHOS":
             cursor.execute("DELETE FROM recordatorios WHERE estado=1")
             await update.message.reply_text("✅ Todos los recordatorios hechos han sido borrados sin confirmación.")
+            # Cancelamos avisos de todos los hechos
+            for job in list(scheduler.get_jobs()):
+                if "_HECHOS" in job.id:
+                    scheduler.remove_job(job.id)
         else:
             cursor.execute("DELETE FROM recordatorios WHERE id=?", (id_actual,))
             await update.message.reply_text(f"✅ Recordatorio {id_actual} borrado sin confirmación.")
+            cancelar_avisos(id_actual)
         conexion.commit()
         conexion.close()
         if ids:
@@ -505,9 +523,14 @@ async def borrar_confirmar(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if id_actual == "HECHOS":
         cursor.execute("DELETE FROM recordatorios WHERE estado=1")
         await update.message.reply_text("✅ Todos los recordatorios hechos han sido borrados.")
+        # Cancelamos avisos de todos los hechos
+        for job in list(scheduler.get_jobs()):
+            if "_HECHOS" in job.id:
+                scheduler.remove_job(job.id)
     else:
         cursor.execute("DELETE FROM recordatorios WHERE id=?", (id_actual,))
         await update.message.reply_text(f"✅ Recordatorio {id_actual} borrado.")
+        cancelar_avisos(id_actual)
     conexion.commit()
     conexion.close()
 
