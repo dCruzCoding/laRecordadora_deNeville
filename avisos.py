@@ -1,51 +1,111 @@
-from datetime import timedelta
-from telegram.ext import ContextTypes
+from datetime import datetime, timedelta
+import pytz
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
+from telegram.ext import Application
 
-async def programar_avisos(context: ContextTypes.DEFAULT_TYPE, chat_id, rid, texto, fecha, aviso_previo_min):
-    """Programa el aviso previo y el aviso principal."""
-    if fecha:
-        # Aviso principal
-        context.job_queue.run_once(
-            enviar_recordatorio,
-            fecha,
-            name=f"recordatorio_{rid}",
-            data={"chat_id": chat_id, "id": rid, "texto": texto},
+# --- Variable Global ---
+# Guardará la instancia de la aplicación de PTB para poder usar el bot
+telegram_app: Application = None
+
+# --- Configuración del Scheduler ---
+# ¡IMPORTANTE! Añadimos una zona horaria. Cámbiala por la tuya.
+scheduler = AsyncIOScheduler(
+    jobstores={
+        'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')
+    },
+    timezone=pytz.timezone('Europe/Madrid') 
+)
+
+async def iniciar_scheduler(app: Application):
+    """Guarda la instancia de la app de Telegram y arranca el scheduler."""
+    global telegram_app
+    telegram_app = app
+    if not scheduler.running:
+        scheduler.start()
+
+def detener_scheduler():
+    """Detiene el scheduler de forma segura."""
+    if scheduler.running:
+        scheduler.shutdown()
+
+async def programar_avisos(chat_id: int, rid: str, texto: str, fecha: datetime, aviso_previo_min: int):
+    """Programa los avisos usando fechas "aware" (conscientes de la zona horaria)."""
+    if not fecha:
+        return
+
+    # Nos aseguramos de que la fecha tenga la misma zona horaria que el scheduler
+    fecha_aware = fecha.replace(tzinfo=scheduler.timezone) if fecha.tzinfo is None else fecha
+
+    # Aviso principal
+    scheduler.add_job(
+        enviar_recordatorio,
+        'date',
+        run_date=fecha_aware,
+        id=f"recordatorio_{rid}",
+        args=[chat_id, rid, texto],
+        misfire_grace_time=60,
+        replace_existing=True
+    )
+
+    # Imprimimos la confirmación del aviso principal
+    print(f"✅ Recordatorio Programado: '{rid}' para las {fecha_aware.strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Aviso previo
+    if aviso_previo_min > 0:
+        aviso_time = fecha_aware - timedelta(minutes=aviso_previo_min)
+        # Comparamos con la hora actual con zona horaria
+        if aviso_time > datetime.now(tz=scheduler.timezone):
+            scheduler.add_job(
+                enviar_aviso_previo,
+                'date',
+                run_date=aviso_time,
+                id=f"aviso_{rid}",
+                args=[chat_id, rid, texto, aviso_previo_min],
+                misfire_grace_time=60,
+                replace_existing=True
+            )
+
+            # Lógica para formatear el tiempo del aviso previo para el print
+            horas = aviso_previo_min // 60
+            mins = aviso_previo_min % 60
+            tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
+            
+            # Imprimimos la confirmación del aviso previo
+            print(f"  🔔└─ Aviso Previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
+
+async def enviar_recordatorio(chat_id: int, rid: str, texto: str):
+    """Usa la variable global 'telegram_app' para enviar el mensaje."""
+    if telegram_app:
+        await telegram_app.bot.send_message(
+            chat_id=chat_id,
+            text=f"⏰ *¡Es la hora!* `{rid}` - {texto}",
+            parse_mode="Markdown"
         )
-        # Aviso previo
-        if aviso_previo_min > 0:
-            aviso_time = fecha - timedelta(minutes=aviso_previo_min)
-            if aviso_time > context.application.timeouts["current_time"]():
-                context.job_queue.run_once(
-                    enviar_aviso_previo,
-                    aviso_time,
-                    name=f"aviso_{rid}",
-                    data={"chat_id": chat_id, "id": rid, "texto": texto, "minutos": aviso_previo_min},
-                )
 
-async def enviar_recordatorio(context: ContextTypes.DEFAULT_TYPE):
-    """Envía el recordatorio principal."""
-    data = context.job.data
-    await context.bot.send_message(
-        chat_id=data["chat_id"],
-        text=f"⏰ *¡Es la hora!* `{data['id']}` - {data['texto']}",
-        parse_mode="Markdown"
-    )
+async def enviar_aviso_previo(chat_id: int, rid: str, texto: str, minutos: int):
+    """Usa la variable global 'telegram_app' para enviar el aviso previo."""
+    if telegram_app:
+        horas = minutos // 60
+        mins = minutos % 60
+        tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
+        
+        await telegram_app.bot.send_message(
+            chat_id=chat_id,
+            text=f"⚠️ *Aviso previo* ({tiempo_str} antes): `{rid}` - {texto}",
+            parse_mode="Markdown"
+        )
 
-async def enviar_aviso_previo(context: ContextTypes.DEFAULT_TYPE):
-    """Envía el aviso previo."""
-    data = context.job.data
-    horas = data["minutos"] // 60
-    mins = data["minutos"] % 60
-    tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-    await context.bot.send_message(
-        chat_id=data["chat_id"],
-        text=f"⚠️ *Aviso previo* ({tiempo_str} antes): `{data['id']}` - {data['texto']}",
-        parse_mode="Markdown"
-    )
+def cancelar_avisos(rid: str):
+    """Cancela los jobs asociados a un recordatorio."""
+    for job_id in [f"recordatorio_{rid}", f"aviso_{rid}"]:
+        try:
+            scheduler.remove_job(job_id)
+        except Exception:
+            pass
 
-def cancelar_avisos(context: ContextTypes.DEFAULT_TYPE, rid):
-    """Cancela cualquier job asociado a un recordatorio."""
-    for job_name in (f"recordatorio_{rid}", f"aviso_{rid}"):
-        jobs = context.job_queue.get_jobs_by_name(job_name)
-        for job in jobs:
-            job.schedule_removal()
+def cancelar_todos_los_avisos():
+    """Elimina TODOS los jobs programados del scheduler."""
+    if scheduler.running:
+        scheduler.remove_all_jobs()
+    print("🔥 Todos los avisos programados han sido eliminados.")

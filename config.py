@@ -19,3 +19,11 @@ modo_seguro = {
     "confirmar_eliminacion": True,
     "confirmar_transformacion": True
 }
+
+
+# Para que el código sea más limpio, definimos los estados aquí también
+ESTADOS = {
+    0: "🕒 Pendiente",
+    1: "✅ Hecho",
+    2: "🗂️ Pasado"
+}

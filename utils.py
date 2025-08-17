@@ -1,5 +1,5 @@
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from dateparser.search import search_dates
 from config import MESES_SIGLAS        # <— antes .config
 from db import get_connection           # <— antes .db
@@ -58,3 +58,44 @@ def formatear_fecha_para_mensaje(fecha_iso):
         return fecha.strftime("%d %b %Y")
     else:
         return fecha.strftime("%d %b %Y, %H:%M")
+
+
+def parsear_tiempo_a_minutos(valor: str):
+    """Convierte 2h, 1d, 30m o 0 a minutos."""
+    if valor == "0":
+        return 0
+    try:
+        if valor.endswith("h"):
+            return int(valor[:-1]) * 60
+        elif valor.endswith("d"):
+            return int(valor[:-1]) * 1440
+        elif valor.endswith("m"):
+            return int(valor[:-1])
+    except ValueError:
+        return None
+    return None
+
+
+def formatear_lista_para_mensaje(recordatorios: list, mostrar_info_aviso: bool = False) -> str:
+    """
+    Toma una lista de recordatorios y la convierte en un string formateado para un mensaje.
+    - recordatorios: una lista de tuplas de la base de datos.
+    - mostrar_info_aviso: si es True, añade la línea de 'Aviso a las...'.
+    """
+    lineas = []
+    for rid, texto, fecha_iso, _, aviso_previo in recordatorios:
+        fecha_str = formatear_fecha_para_mensaje(fecha_iso)
+        
+        # Línea principal, sin el estado
+        entrada = f"`{rid}` - {texto} ({fecha_str})"
+        
+        if mostrar_info_aviso:
+            if fecha_iso and aviso_previo and aviso_previo > 0:
+                fecha_recordatorio = datetime.fromisoformat(fecha_iso)
+                fecha_aviso = fecha_recordatorio - timedelta(minutes=aviso_previo)
+                info_aviso_str = f"🔔 Aviso a las: {fecha_aviso.strftime('%d %b, %H:%M')}"
+            else:
+                info_aviso_str = "🔕 Sin aviso programado"
+            entrada += f"\n  └─ {info_aviso_str}"
+        lineas.append(entrada)
+    return "\n".join(lineas)
