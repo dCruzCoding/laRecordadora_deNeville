@@ -7,3 +7,5 @@ requests==2.32.4
 SQLAlchemy==2.0.43
 tzdata==2025.2
 tzlocal==5.3.1
+Flask==3.1.1
+Werkzeug==3.1.3
