@@ -1,4 +1,5 @@
 import threading
+import asyncio
 from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
 from config import TOKEN
@@ -24,14 +25,17 @@ def run_flask():
     port = int(os.environ.get('PORT', 10000))
     flask_app.run(host='0.0.0.0', port=port)
 
-
-
-def main():
-    crear_tablas()
-
     # --- Parte 2: La Lógica de tu Bot (ligeramente modificada) ---
 def run_telegram_bot():
     """Función que contiene la lógica para iniciar el bot."""
+
+     # Creamos un nuevo bucle de eventos para este hilo
+    loop = asyncio.new_event_loop()
+    # Establecemos el nuevo bucle como el actual para este hilo
+    asyncio.set_event_loop(loop)
+
+    # ------------------------------------
+    
     crear_tablas()
     app = ApplicationBuilder().token(TOKEN).post_init(avisos.iniciar_scheduler).build()
 
