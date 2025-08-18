@@ -36,9 +36,9 @@ def run_telegram_bot():
     app = ApplicationBuilder().token(TOKEN).post_init(avisos.iniciar_scheduler).build()
 
     # Añadimos todos los handlers
-    app.add_handler(CommandHandler("start", start_help.start))
-    app.add_handler(CommandHandler("ayuda", start_help.ayuda))
-    app.add_handler(start_help.reset_handler)
+    app.add_handler(CommandHandler("start", start_help_reset.start))
+    app.add_handler(CommandHandler("ayuda", start_help_reset.ayuda))
+    app.add_handler(start_help_reset.reset_handler)
     app.add_handler(CommandHandler("lista", lista.lista))
     app.add_handler(recordar.recordar_handler)
     app.add_handler(cambiar_estado.cambiar_estado_handler)
