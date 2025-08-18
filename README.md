@@ -1,145 +1,138 @@
+### **README.md para La Recordadora (Versión Unificada)**
 
-# 🤖🧠 Bot de Telegram: *La Recordadora*
+# La Recordadora 👵 (Versión Unificada)
 
-> Inspirado en la entrañable esfera mágica de Neville Longbottom, *La Recordadora* es un asistente de memoria con alma de abuela cariñosa y regañona. Su misión es ayudarte a no olvidar aquello que dijiste que harías... aunque a veces se te pase.
+> ¡Ay, criatura! Que no se te olvide nada. Soy tu abuela digital, aquí para ayudarte a recordar todas esas cosillas importantes de la vida, ya sea desde tu ordenador o desde la nube.
 
----
+**La Recordadora** es un bot de Telegram personalizable diseñado para ser tu asistente de recordatorios personal. Este repositorio contiene el código para ejecutar el bot tanto en un **entorno de desarrollo local** como en un **despliegue continuo y gratuito en la nube (Render)**.
 
-## 🎯 Objetivo del proyecto
+## ✨ Características Principales
 
-Diseñar un bot conversacional en Telegram que actúe como asistente de memoria personal, ayudando al usuario a recordar tareas, hábitos o eventos que ha registrado previamente. A diferencia de otros bots de productividad, *La Recordadora* incorpora una personalidad propia, entrañable y ligeramente regañona, para fomentar el cumplimiento con un tono humorístico y familiar.
+-   **Doble Entorno de Ejecución**: Optimizado para funcionar en local para pruebas y en la nube (Render) para un servicio 24/7.
+-   **Creación de Recordatorios Intuitiva**: Añade recordatorios usando un formato simple y flexible.
+-   **Avisos Previos Personalizables**: Configura notificaciones para que te lleguen minutos, horas o incluso días antes.
+-   **Gestión de Estados Inteligente**: Los recordatorios pueden estar `Pendientes`, `Hechos` o pasar automáticamente a `Pasados` si su fecha expira.
+-   **Listas Claras y Agrupadas**: Visualiza todos tus recordatorios organizados por su estado para una máxima claridad.
+-   **Persistencia de Datos**: Gracias a **SQLite** y **APScheduler**, los recordatorios y avisos programados sobreviven a los reinicios.
+-   **Modo Seguro**: Configura la necesidad de confirmación para acciones destructivas.
+-   **Atajos de Comandos**: Interactúa rápidamente proporcionando IDs directamente con los comandos `/borrar` y `/cambiar`.
 
-**Usuarios objetivo:** Personas olvidadizas, estudiantes, trabajadores multitarea o cualquier persona que quiera recordar tareas con un poco de humor.
+## 🏛️ Arquitectura y Versionado
 
----
+El bot ha evolucionado a través de varias versiones clave, cada una marcada con un **Tag de Git** para facilitar la consulta de su código fuente en un punto específico del tiempo. La rama `main` siempre contiene la última versión estable.
 
-## 🔧 Funcionalidades principales
+### v1.0: Entorno Local (Polling Puro)
+-   **Tag en Git**: `v1.0-local`
+-   **Ejecución**: Se ejecuta con `python main.py` en un entorno local.
+-   **Mecanismo**: Utiliza `python-telegram-bot` en modo `polling`, donde el bot pregunta constantemente a Telegram si hay mensajes nuevos.
+-   **Uso Ideal**: Desarrollo, pruebas y añadir nuevas funcionalidades.
 
-### 1. Inicio y configuración
+### v1.1: Entorno Cloud - Render (Híbrido Polling + Servidor Web)
+-   **Tag en Git**: `v1.1-render`
+-   **Ejecución**: Desplegado como un "Web Service" gratuito en Render.
+-   **Mecanismo**: Para cumplir con los requisitos del plan gratuito de Render, el bot utiliza una arquitectura híbrida:
+    *   Un **hilo principal** ejecuta el bot en modo `polling`.
+    *   Un **hilo secundario** levanta un micro-servidor **Flask** que responde a los chequeos de salud de Render, evitando que el servicio sea detenido.
+    *   Un **monitor de actividad externo** (como Uptime Robot) visita la URL del servicio cada 5 minutos para evitar que se "duerma" por inactividad.
+-   **Uso Ideal**: Producción. Un servicio estable, gratuito y que funciona 24/7.
 
-* `/start`: bienvenida y explicación del funcionamiento del bot.
-* Configuración opcional del tono de la Recordadora: `dulce` / `sarcástica`.
 
-### 2. Registro de recordatorios
+## 🚀 Guía de Instalación y Despliegue
 
-* `/recordar`: añadir recordatorio con o sin fecha/hora.
+### Requisitos Previos
+-   Python 3.11+
+-   Git
+-   Una cuenta de GitHub
 
-  * Soporte para lenguaje natural, por ejemplo:
+### 1. Clonar y Preparar el Entorno
+```bash
+# Clona el repositorio
+git clone [URL_DE_TU_REPOSITORIO]
+cd La_Recordadora
 
-    * “Recuérdame llamar a mi madre mañana a las 6.”
-    * “Tengo que estudiar para el examen del viernes.”
-* Posibilidad de categorizarlos: `tarea`, `hábito`, `cita`.
+# Crea y activa un entorno virtual
+python -m venv venv
+# En Windows: venv\Scripts\activate
+# En macOS/Linux: source venv/bin/activate
 
-### 3. Gestión de recordatorios
-
-* `/lista`: ver recordatorios activos.
-* `/hecho`: marcar como completados.
-* `/borrar`: eliminar un recordatorio.
-* `/ayuda`: resumen de comandos y funcionalidades.
-
-### 4. Seguimiento automático
-
-* Envío de recordatorios programados.
-* Detección de tareas no cumplidas y respuesta con frases como:
-
-  * “Ay, criatura, ¿otra vez se te ha olvidado?”
-  * “Mira que te lo dije, ¿eh?”
-
-### 5. Extras opcionales (Fase 2)
-
-* Estadísticas: cuántas veces se repite una tarea sin hacer.
-* Integración con Google Calendar.
-* Interfaz web de gestión (dashboard ligero).
-
----
-
-## 🔁 Flujo de uso del bot
-
-A continuación, se presenta un diagrama del flujo básico de interacción:
-
-```
-[Usuario inicia bot con /start]
-         ↓
-[Bot da la bienvenida y pide tareas a recordar]
-         ↓
-[Usuario escribe: "Recuérdame beber agua cada día a las 12"]
-         ↓
-[Bot guarda el recordatorio y lo programa]
-         ↓
-[Hora del recordatorio → Bot envía mensaje]
-         ↓
-[Usuario responde con /hecho o ignora]
-         ↓
-[Si ignora → Bot reenvía recordatorio con tono de abuela]
+# Instala las dependencias
+pip install -r requirements.txt
 ```
 
----
+### 2. Configuración (`config.py`)
+Crea un archivo `config.py` en la raíz del proyecto. Este archivo está diseñado para funcionar tanto en local como en Render sin necesidad de cambios.
 
-## 🛠️ Tecnologías y herramientas
+```python
+# config.py
+import os
+import locale
 
-### Lenguaje
+# Intenta configurar el idioma a español, si falla, continúa sin detenerse.
+try:
+    locale.setlocale(locale.LC_TIME, "es_ES.UTF-8")
+except locale.Error:
+    print("⚠️ Advertencia: El locale 'es_ES' no está disponible.")
 
-* **Python** (sencillo, mantenible y con buena documentación)
+# Lee el TOKEN desde una variable de entorno (para Render).
+# Si no la encuentra, usa el valor que pongas aquí (para local).
+TOKEN = os.environ.get("TOKEN", "AQUI_VA_TU_TOKEN_SI_ESTAS_EN_LOCAL")
 
-### Librerías
+# Diccionario de estados
+ESTADOS = {
+    0: "🕒", # Pendiente
+    1: "✅", # Hecho
+    2: "🗂️"  # Pasado
+}
+```
 
-* `python-telegram-bot`: para la gestión del bot.
-* `apscheduler`: para la programación de tareas.
-* `dateparser` o `parsedatetime`: para entender lenguaje natural con fechas y horas.
+### Opción A: Ejecución en Local
+1.  Asegúrate de haber puesto tu token de Telegram en la línea `TOKEN = ...` de `config.py`.
+2.  Ejecuta el bot desde la terminal:
+    ```bash
+    python main.py
+    ```
+    El bot empezará a funcionar. Para detenerlo, pulsa `Ctrl+C`.
 
-### Almacenamiento
+### Opción B: Despliegue en Render (Cloud 24/7)
+1.  **Sube tu código a un repositorio de GitHub.** Asegúrate de que el archivo `.gitignore` está presente para no subir las bases de datos locales.
 
-* **SQLite** para desarrollo local.
-* **Firestore (GCP)** para almacenamiento persistente y despliegue cloud.
+2.  **Crea un "Web Service" en Render** con la siguiente configuración:
+    *   **Name**: `la-recordadora` (o el que prefieras)
+    *   **Build Command**: `pip install -r requirements.txt`
+    *   **Start Command**: `python main.py`
+    *   **Instance Type**: `Free`
 
-### Despliegue
+3.  **Configura las Variables de Entorno** en la pestaña `Environment` del servicio:
+    *   `TOKEN`: `(Pega aquí tu token de Telegram)`
+    *   `PYTHON_VERSION`: `3.12.4`
 
-* Desarrollo local y pruebas en PC.
-* Despliegue final en **Google Cloud Run** o **Cloud Functions** (con Scheduler si se requiere ejecución periódica).
+4.  **Configura un Monitor de Actividad Externo** (ej: Uptime Robot):
+    *   Copia la URL pública que te da Render (ej: `https://la-recordadora.onrender.com`).
+    *   En Uptime Robot, crea un monitor `HTTP(s)` que visite esa URL cada `5 minutos`. Esto mantendrá el servicio siempre activo.
 
----
+## 📖 Guía de Comandos
+*(Esta sección resume la funcionalidad para el usuario final)*
 
-## 🗺️ Hoja de ruta (Roadmap)
+-   **/start**: Inicia la conversación con la abuela.
+-   **/ayuda**: Muestra la lista completa de comandos.
+-   **/lista `[filtro]`**: Muestra los recordatorios agrupados por estado (`pendientes`, `hechos`, `pasados`).
+-   **/recordar `[fecha * texto]`**: Crea un nuevo recordatorio.
+-   **/borrar `[ID1 ID2 ...]`**: Elimina uno o más recordatorios.
+-   **/cambiar `[ID1 ID2 ...]`**: Cambia el estado de uno o más recordatorios.
+-   **/configuracion `[nivel]`**: Ajusta el "Modo Seguro".
+-   **/reset**: ⚠️ Borra **TODOS** los recordatorios (requiere confirmación).
+-   **/cancelar**: Cancela la operación en curso.
 
-### 🟢 Fase 1: Mínimo Producto Viable (MVP)
+## 🛣️ Próximos Pasos (Roadmap)
+-   **v1.2**: Implementación de funcionalidad **Multi-Usuario**, permitiendo que diferentes personas usen el bot de forma aislada.
+-   **v2.0**: Migración de la arquitectura a **Google Cloud Platform (GCP)**, usando Webhooks (Cloud Run) y un planificador externo (Cloud Scheduler) para una solución 100% serverless y más eficiente.
 
-* [ ] Crear el bot con BotFather y obtener token.
-* [ ] Configurar entorno local (Python + librerías).
-* [ ] Implementar `/start`, `/recordar`, `/lista`, `/hecho`, `/borrar`.
-* [ ] Añadir almacenamiento local (SQLite).
-* [ ] Programar notificaciones con `apscheduler`.
+## 🏷️ Versionado
 
-### 🟡 Fase 2: Persistencia y despliegue cloud
+Este proyecto utiliza **Tags de Git** para marcar los lanzamientos de versiones estables. Puedes ver una lista de todas las versiones en la sección de **"Tags"** o **"Releases"** del repositorio en GitHub.
 
-* [ ] Migrar almacenamiento a Firestore.
-* [ ] Desplegar en Google Cloud Functions/Run.
-* [ ] Configurar programación con Cloud Scheduler.
-
-### 🔵 Fase 3: Mejora UX y personalidad
-
-* [ ] Añadir frases personalizadas y modo "abuela regañona".
-* [ ] Permitir configuración de tono (sarcástico vs dulce).
-* [ ] Añadir estadísticas de cumplimiento.
-* [ ] Validación de lenguaje natural con `dateparser`.
-
-### 🔴 Fase 4: Extras opcionales
-
-* [ ] Categorías de recordatorios.
-* [ ] Integración con Google Calendar.
-* [ ] Interfaz web ligera.
-
----
-
-## 🛡️ Consideraciones adicionales
-
-* Manejo de errores (fechas inválidas, comandos mal escritos, etc.).
-* Protección de datos del usuario.
-* Escalabilidad (si decides abrirlo a más personas).
-
----
-
-## ⚠️ Importante
-
-Este bot no pretende ser un sistema de gestión de tareas completo, sino un asistente simpático para el día a día. Las decisiones técnicas están orientadas a facilitar el desarrollo y despliegue personal, sin comprometer seguridad ni escalabilidad en producción masiva.
-
-
+Para descargar el código de una versión específica (por ejemplo, `v1.0-local`), puedes usar el siguiente comando:
+```bash
+# Clona el repositorio y se posiciona directamente en el tag deseado
+git clone --branch v1.0-local [URL_DE_TU_REPOSITORIO]
+```
