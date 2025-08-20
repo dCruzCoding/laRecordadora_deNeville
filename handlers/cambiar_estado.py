@@ -8,9 +8,10 @@ from telegram.ext import (
 )
 from datetime import datetime
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos
+from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, cancelar_conversacion
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
+from personalidad import get_text
 
 # Estados de la conversación (no cambian)
 ELEGIR_ID, CONFIRMAR_CAMBIO, REPROGRAMAR_AVISO = range(3)
@@ -62,7 +63,7 @@ async def recibir_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recibe los IDs después de que el usuario vea la lista."""
     ids = update.message.text.split()
     if not ids:
-        await update.message.reply_text("⚠️ No escribiste ningún ID.")
+        await update.message.reply_text(get_text("error_no_id"))
         return ELEGIR_ID
     
     return await _procesar_ids_para_cambiar(update, context, ids)
@@ -74,7 +75,8 @@ async def _procesar_ids_para_cambiar(update: Update, context: ContextTypes.DEFAU
     
     modo_seguro = int(get_config(chat_id, "modo_seguro") or 0)
     if modo_seguro in (2, 3):
-        await update.message.reply_text(f"⚠️ Vas a cambiar el estado de {len(ids)} recordatorio(s). Escribe 'SI' para confirmar.")
+        mensaje_confirmacion = get_text("pregunta_confirmar_cambio", count=len(ids))
+        await update.message.reply_text(mensaje_confirmacion)
         return CONFIRMAR_CAMBIO
     
     return await ejecutar_cambio(update, context)
@@ -84,9 +86,7 @@ async def confirmar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_cambio(update, context)
     
-    await update.message.reply_text("❌ Operación cancelada.")
-    context.user_data.clear()
-    return ConversationHandler.END
+    return await cancelar_conversacion(update, context)
 
 async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -137,18 +137,19 @@ async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 pass
         conn.commit()
 
-    mensaje = f"🔄 Estado cambiado para: {', '.join(cambiados)}" if cambiados else "⚠️ No se encontró ningún ID de tu propiedad."
+    mensaje = get_text("confirmacion_cambio", ids=', '.join(cambiados)) if cambiados else get_text("error_no_id") # <-- CAMBIO
     await update.message.reply_text(mensaje)
 
     if reprogramados_info:
-        # Si hay recordatorios reactivados, guardamos el primero en el contexto y preguntamos
         context.user_data["reprogramar_lista"] = reprogramados_info
         primer_recordatorio = reprogramados_info[0]
-        await update.message.reply_text(
-            f"🗓️ Has reactivado el recordatorio `#{primer_recordatorio['user_id']}` - {primer_recordatorio['texto']}.\n\n"
-            "⏳ ¿Cuánto antes quieres que te avise ahora? (ej: `30m`, `2h`, `0` para ninguno)",
-            parse_mode="Markdown"
+        
+        # <-- CAMBIO: Usamos la personalidad
+        mensaje_reprogramar = (
+            f"🗓️ Has reactivado el recordatorio `#{primer_recordatorio['user_id']}` - _{primer_recordatorio['texto']}_.\n\n"
+            f"{get_text('recordar_pide_aviso')}"
         )
+        await update.message.reply_text(mensaje_reprogramar, parse_mode="Markdown")
         return REPROGRAMAR_AVISO
 
     context.user_data.clear()
@@ -160,7 +161,7 @@ async def recibir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
     minutos = parsear_tiempo_a_minutos(aviso_str)
 
     if minutos is None:
-        await update.message.reply_text("⚠️ Formato no válido. Usa `2h`, `1d`, `30m`, `0`.")
+        await update.message.reply_text(get_text("error_aviso_invalido"))
         return REPROGRAMAR_AVISO
 
     # Obtenemos el recordatorio que estábamos reprogramando
@@ -181,25 +182,22 @@ async def recibir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
         recordatorio_actual["fecha"],
         minutos
     )
-    await update.message.reply_text(f"✅ ¡Aviso para `#{recordatorio_actual['user_id']}` reprogramado!")
+    mensaje_confirmacion = get_text("aviso_reprogramado", id=recordatorio_actual['user_id']) # <-- CAMBIO
+    await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown") 
 
     # Si quedan más recordatorios por reprogramar, preguntamos por el siguiente
     if reprogramar_lista:
         context.user_data["reprogramar_lista"] = reprogramar_lista
         siguiente_recordatorio = reprogramar_lista[0]
-        await update.message.reply_text(
-            f"🗓️ Ahora, para el recordatorio `#{siguiente_recordatorio['user_id']}` - {siguiente_recordatorio['texto']}.\n\n"
-            "⏳ ¿Cuánto antes quieres que te avise? (ej: `30m`, `2h`, `0` para ninguno)",
-            parse_mode="Markdown"
+
+        mensaje_siguiente = (
+            f"🗓️ Ahora, para `#{siguiente_recordatorio['user_id']}` - _{siguiente_recordatorio['texto']}_.\n\n"
+            f"{get_text('recordar_pide_aviso')}"
         )
+        await update.message.reply_text(mensaje_siguiente, parse_mode="Markdown")
         return REPROGRAMAR_AVISO
 
     context.user_data.clear()
-    return ConversationHandler.END
-
-async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text("❌ Operación cancelada.")
     return ConversationHandler.END
 
 cambiar_estado_handler = ConversationHandler(
@@ -209,5 +207,5 @@ cambiar_estado_handler = ConversationHandler(
         CONFIRMAR_CAMBIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_cambio)],
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar)],
+    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
 )

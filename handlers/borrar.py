@@ -9,9 +9,10 @@ from telegram.ext import (
     filters
 )
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje
+from utils import formatear_lista_para_mensaje, cancelar_conversacion
 from avisos import cancelar_avisos
 from config import ESTADOS
+from personalidad import get_text
 
 ELEGIR_ID, CONFIRMAR = range(2)
 
@@ -60,7 +61,7 @@ async def recibir_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recibe los IDs después de que el usuario vea la lista."""
     ids = update.message.text.split()
     if not ids:
-        await update.message.reply_text("⚠️ No escribiste ningún ID.")
+        await update.message.reply_text(get_text("error_no_id"))
         return ELEGIR_ID
     
     # Pasamos a la misma función de procesamiento.
@@ -76,7 +77,8 @@ async def _procesar_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids:
     
     modo_seguro = int(get_config(chat_id, "modo_seguro") or 0)
     if modo_seguro in (1, 3):
-        await update.message.reply_text(f"⚠️ Vas a borrar {len(ids)} recordatorio(s). Escribe 'SI' para confirmar o cualquier otra cosa para cancelar.")
+        mensaje_confirmacion = get_text("pregunta_confirmar_borrado", count=len(ids))
+        await update.message.reply_text(mensaje_confirmacion)
         return CONFIRMAR
     
     # Si no se necesita confirmación, ejecutamos el borrado directamente.
@@ -87,22 +89,19 @@ async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_borrado(update, context)
     
-    await update.message.reply_text("❌ Operación cancelada.")
-    context.user_data.clear()
-    return ConversationHandler.END
+    return await cancelar_conversacion(update, context) # <-- Usamos la función centralizada
 
 async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Lógica final de borrado. Siempre lee los IDs desde context.user_data."""
+    """Lógica final de borrado."""
     chat_id = update.effective_chat.id
     ids_a_borrar = context.user_data.get("ids_a_borrar", [])
-    borrados_msg = []
+    borrados_msg_list = []
     
     with get_connection() as conn:
         cursor = conn.cursor()
         for user_id_str in ids_a_borrar:
             try:
                 user_id = int(user_id_str.replace("#", ""))
-                
                 cursor.execute("SELECT id FROM recordatorios WHERE user_id = ? AND chat_id = ?", (user_id, chat_id))
                 row = cursor.fetchone()
                 
@@ -110,30 +109,27 @@ async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     recordatorio_id_global = row[0]
                     cursor.execute("DELETE FROM recordatorios WHERE id = ?", (recordatorio_id_global,))
                     if cursor.rowcount > 0:
-                        borrados_msg.append(f"#{user_id}")
+                        borrados_msg_list.append(f"#{user_id}")
                         cancelar_avisos(str(recordatorio_id_global))
             except (ValueError, TypeError):
                 pass
         conn.commit()
     
-    if borrados_msg:
-        await update.message.reply_text(f"🗑 Borrados: {', '.join(borrados_msg)}")
+    if borrados_msg_list:
+        mensaje_exito = get_text("confirmacion_borrado", ids=', '.join(borrados_msg_list)) 
+        await update.message.reply_text(mensaje_exito)
     else:
-        await update.message.reply_text("⚠️ No se encontró ningún ID de tu propiedad con esos números.")
+        await update.message.reply_text(get_text("error_no_id")) 
     
     context.user_data.clear()
     return ConversationHandler.END
 
-async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()
-    await update.message.reply_text("❌ Operación cancelada.")
-    return ConversationHandler.END
-
+# El ConversationHandler apunta a la función de cancelar centralizada
 borrar_handler = ConversationHandler(
     entry_points=[CommandHandler("borrar", borrar_cmd)],
     states={
         ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids)],
         CONFIRMAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_borrado)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar)],
+    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
 )

@@ -3,6 +3,7 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from telegram.ext import Application
+from personalidad import get_text
 
 # --- Variable Global ---
 # Guardará la instancia de la aplicación de PTB para poder usar el bot
@@ -77,9 +78,10 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
 async def enviar_recordatorio(chat_id: int, user_id: int, texto: str):
     """Usa la variable global 'telegram_app' para enviar el mensaje."""
     if telegram_app:
+        mensaje = get_text("aviso_principal", id=user_id, texto=texto)
         await telegram_app.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ *¡Es la hora!* `{user_id}` - {texto}",
+            text=mensaje,
             parse_mode="Markdown"
         )
 
@@ -90,9 +92,10 @@ async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: i
         mins = minutos % 60
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
         
+        mensaje = get_text("aviso_previo", tiempo=tiempo_str, id=user_id, texto=texto)
         await telegram_app.bot.send_message(
             chat_id=chat_id,
-            text=f"⚠️ *Aviso previo* ({tiempo_str} antes): `{user_id}` - {texto}",
+            text=mensaje,
             parse_mode="Markdown"
         )
 

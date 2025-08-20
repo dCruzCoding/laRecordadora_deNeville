@@ -4,6 +4,7 @@ from db import get_connection, actualizar_recordatorios_pasados
 from utils import formatear_lista_para_mensaje
 from datetime import datetime, timedelta
 from config import ESTADOS  # Importamos los estados desde config
+from personalidad import get_text
 
 async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     actualizar_recordatorios_pasados()
@@ -36,21 +37,21 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
         recordatorios = cursor.fetchall()
 
     if not recordatorios:
-        await update.message.reply_text("📭 No tienes recordatorios para este filtro.")
+        # <-- CAMBIO: Mensaje para cuando no hay nada en la lista
+        mensaje_vacio = get_text("lista_vacia")
+        await update.message.reply_text(mensaje_vacio)
         return
 
-    # --- NUEVA LÓGICA DE CONSTRUCCIÓN DEL MENSAJE ---
-
-    # 1. Separamos los recordatorios en listas por categoría
+    # Separamos los recordatorios en listas por categoría
     pendientes = [r for r in recordatorios if r[5] == 0]
     hechos = [r for r in recordatorios if r[5] == 1]
     pasados = [r for r in recordatorios if r[5] == 2]
 
-    # 2. Construimos las secciones del mensaje solo para las listas que no están vacías
+    # Construimos las secciones del mensaje solo para las listas que no están vacías
     secciones_mensaje = []
     if pendientes:
         titulo = f"*{ESTADOS[0]}:*"
-        # 2. Usamos la nueva función centralizada
+        # Usamos la nueva función centralizada
         items = formatear_lista_para_mensaje(pendientes, mostrar_info_aviso=True)
         secciones_mensaje.append(f"{titulo}\n{items}")
         
@@ -64,10 +65,10 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
         items = formatear_lista_para_mensaje(hechos)
         secciones_mensaje.append(f"{titulo}\n{items}")
 
+    # Construimos el mensaje final
     mensaje_final = "\n\n".join(secciones_mensaje)
 
-    if not mensaje_final:
-        await update.message.reply_text("📭 No se encontraron recordatorios.")
-        return
+    if pendientes:
+        mensaje_final += "\n\n" + "---" + "\n_Venga, a trabajar. ¡Que no se diga que los Longbottom nos juntamos con vagos!_"
 
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")

@@ -6,94 +6,72 @@ from telegram.ext import (
     MessageHandler, 
     filters
 )
-from db import resetear_base_de_datos
+from db import resetear_base_de_datos, get_config, set_config
 from avisos import cancelar_todos_los_avisos
-from config import OWNER_ID  # <-- CAMBIO: Importamos tu ID de dueño
+from config import OWNER_ID  
+from personalidad import get_text
+from utils import cancelar_conversacion
 
 # Estado para la conversación de reseteo (no cambia)
 CONFIRMACION_RESET = range(1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Función de bienvenida, sin cambios."""
-    await update.message.reply_text(
-        "👵 ¡Ay criatura! Soy *La Recordadora*, tu abuela digital.\n"
-        "Dime qué no quieres olvidar y yo te lo recordaré.\n\n"
-        "Usa /ayuda para ver lo que puedo hacer.",
-        parse_mode="Markdown"
-    )
+    """
+    Da la bienvenida al usuario. Muestra un mensaje largo la primera vez
+    y mensajes cortos y aleatorios las veces siguientes.
+    """
+    chat_id = update.effective_chat.id
+    
+    # Comprobamos en la DB si el usuario ya ha iniciado el bot antes
+    usuario_ya_iniciado = get_config(chat_id, "usuario_iniciado")
+
+    if not usuario_ya_iniciado:
+        # Es la primera vez que este usuario inicia el bot
+        mensaje = get_text("start_inicio")
+        # Marcamos en la DB que el usuario ya ha recibido la bienvenida
+        set_config(chat_id, "usuario_iniciado", "1")
+    else:
+        # El usuario ya es un viejo conocido, le damos un saludo aleatorio
+        mensaje = get_text("start")
+    
+    await update.message.reply_text(mensaje, parse_mode="Markdown")
 
 async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra la ayuda. El mensaje es dinámico dependiendo del usuario."""
-    chat_id = update.effective_chat.id # <-- Obtenemos el ID del usuario
-    
-    # --- LÓGICA DINÁMICA ---
-    
-    # Empezamos con la parte del mensaje que es común para todos
-    mensaje_ayuda_base = (
-        "*📖 Ayuda de La Recordadora*\n\n"
-        "Estos son los comandos disponibles:\n\n"
-        "📌 /start – Mensaje de bienvenida.\n"
-        "📌 /ayuda – Muestra este mensaje de ayuda.\n"
-        "📌 /lista – Lista todos tus recordatorios.\n"
-        "   ➡️ `/lista pendientes | hechos | pasados`\n"
-        "📌 /recordar – Añadir un nuevo recordatorio.\n"
-        "📌 /borrar – Borrar uno o varios de tus recordatorios.\n"
-        "📌 /cambiar – Cambiar el estado de uno de tus recordatorios.\n"
-        "📌 /configuracion – Cambiar tu *modo seguro*.\n"
-        "📌 /cancelar – Cancela la acción en curso.\n"
-    )
-    
-    # Si el usuario es el dueño, añadimos el comando de administrador
+    chat_id = update.effective_chat.id   # Obtenemos ID del user
+    mensaje = get_text("ayuda_base")
     if chat_id == OWNER_ID:
-        mensaje_ayuda_final = mensaje_ayuda_base + "\n⚠️ /reset – BORRA TODOS los recordatorios (solo el creador).\n"
-    else:
-        mensaje_ayuda_final = mensaje_ayuda_base
+        mensaje += get_text("ayuda_admin")
+    await update.message.reply_text(mensaje, parse_mode="Markdown")
 
-    await update.message.reply_text(mensaje_ayuda_final, parse_mode="Markdown")
-
-# --- COMANDO /RESET MODIFICADO ---
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Inicia el proceso de reseteo, pidiendo confirmación.
     ¡Ahora solo funciona si el usuario es el dueño del bot!
     """
-    # Mantenemos la comprobación de seguridad del reset por si acaso
     if update.effective_chat.id != OWNER_ID:
-        await update.message.reply_text("⛔ Lo siento, este es un comando de mantenimiento y solo puede ser usado por mi creador.")
+        await update.message.reply_text(get_text("reset_denegado"))
         return ConversationHandler.END
 
-    # Si el ID es correcto, la función continúa como antes
-    await update.message.reply_text(
-        "🔥🔥🔥 *¡ATENCIÓN!* 🔥🔥🔥\n\n"
-        "Estás a punto de borrar *TODOS* los recordatorios de la base de datos. "
-        "Esta acción es *IRREVERSIBLE*.\n\n"
-        "Para confirmar, escribe la palabra: `CONFIRMAR`",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text(get_text("reset_aviso"), parse_mode="Markdown")
     return CONFIRMACION_RESET
 
 async def confirmar_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Verifica la confirmación y ejecuta el reseteo. Sin cambios."""
     if update.message.text.strip() == "CONFIRMAR":
         resetear_base_de_datos()
         cancelar_todos_los_avisos()
-        await update.message.reply_text("✅ ¡Hecho! Todos los recordatorios han sido eliminados.")
+        await update.message.reply_text(get_text("reset_confirmado"))
     else:
-        await update.message.reply_text("❌ Operación cancelada. Los recordatorios están a salvo.")
+        await update.message.reply_text(get_text("reset_cancelado"))
     
     return ConversationHandler.END
 
-async def cancelar_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Función de fallback para cancelar la operación. Sin cambios."""
-    await update.message.reply_text("❌ Reseteo cancelado.")
-    return ConversationHandler.END
-
-# ConversationHandler 
+# ConversationHandler
 reset_handler = ConversationHandler(
     entry_points=[CommandHandler("reset", reset_cmd)],
     states={
         CONFIRMACION_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_reset)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar_reset)],
+    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
 )

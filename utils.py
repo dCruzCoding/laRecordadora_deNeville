@@ -1,23 +1,9 @@
 import re
 from datetime import datetime, timedelta
-from dateparser.search import search_dates        
-
-# def generar_id(fecha):
-#     mes = fecha.month
-#     sigla = MESES_SIGLAS[mes]
-#     with get_connection() as conn:
-#         cursor = conn.cursor()
-#         cursor.execute(
-#             "SELECT id FROM recordatorios WHERE id LIKE ? ORDER BY id DESC LIMIT 1",
-#             (f"{sigla}%",)
-#         )
-#         ultimo = cursor.fetchone()
-#     if ultimo:
-#         ultimo_num = int(ultimo[0][len(sigla):])
-#         nuevo_num = ultimo_num + 1
-#     else:
-#         nuevo_num = 1
-#     return f"{sigla}{nuevo_num:02d}"
+from dateparser.search import search_dates
+from personalidad import get_text
+from telegram import Update
+from telegram.ext import ContextTypes, ConversationHandler        
 
 def normalizar_hora(texto):
     patron = r'(a las|a la) (\d{1,2})(?![:\d])'
@@ -98,3 +84,15 @@ def formatear_lista_para_mensaje(recordatorios: list, mostrar_info_aviso: bool =
             entrada += f"\n  └─ {info_aviso_str}"
         lineas.append(entrada)
     return "\n".join(lineas)
+
+
+async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Función genérica para cancelar cualquier ConversationHandler.
+    Limpia los datos de usuario y envía un mensaje de cancelación.
+    """
+    if context.user_data:
+        context.user_data.clear()
+
+    await update.message.reply_text(get_text("cancelar"))
+    return ConversationHandler.END
