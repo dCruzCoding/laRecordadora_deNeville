@@ -1,5 +1,3 @@
-# main.py
-
 import threading
 import asyncio
 from flask import Flask

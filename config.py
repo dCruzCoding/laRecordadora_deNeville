@@ -19,20 +19,9 @@ except locale.Error:
 
 # Leemos el token desde una variable de entorno para mayor seguridad.
 # Si la variable no existe (porque estamos en local), usamos un valor por defecto.
-TOKEN = os.getenv("TELEGRAM_TOKEN", "TU_TOKEN_AQUI_PARA_PRUEBAS_LOCALES")  # Cambiar por variable de entorno después
-
-# Configuración meses
-MESES_SIGLAS = {
-    1: "E",  2: "F",  3: "MZ", 4: "AB", 5: "MY", 6: "JN",
-    7: "JL", 8: "AG", 9: "S", 10: "O", 11: "N", 12: "D"
-}
-
-# Preferencias del modo seguro
-modo_seguro = {
-    "confirmar_eliminacion": True,
-    "confirmar_transformacion": True
-}
-
+TOKEN = os.getenv("TELEGRAM_TOKEN", "TU_TOKEN_AQUI_PARA_PRUEBAS_LOCALES")
+  
+OWNER_ID = 000000000    # ID de usuario de Telegram
 
 # Para que el código sea más limpio, definimos los estados aquí también
 ESTADOS = {

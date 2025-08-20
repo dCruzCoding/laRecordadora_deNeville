@@ -6,7 +6,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from utils import parsear_recordatorio, generar_id, parsear_tiempo_a_minutos
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos
 from db import get_connection
 from avisos import programar_avisos
 
@@ -51,45 +51,43 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     texto = context.user_data["texto"]
     fecha = context.user_data["fecha"]
-    # Pasamos el chat_id a la función de guardado
-    await guardar_recordatorio(update, context, texto, fecha, minutos, update.effective_chat.id)
+    chat_id = update.effective_chat.id # <-- CAMBIO: Obtenemos chat_id
+    await guardar_recordatorio(update, context, texto, fecha, minutos, chat_id) # <-- CAMBIO: Pasamos chat_id
     # Limpiamos los datos de la conversación
     context.user_data.clear()
     return ConversationHandler.END
 
 async def guardar_recordatorio(update: Update, context: ContextTypes.DEFAULT_TYPE, texto: str, fecha, aviso_previo: int, chat_id: int):
     """Guarda en la base de datos y programa avisos."""
-    rid = generar_id(fecha)
     fecha_iso = fecha.isoformat() if fecha else None
+    
     with get_connection() as conn:
         cursor = conn.cursor()
-        # ¡CORRECCIÓN! Añadimos chat_id a la sentencia INSERT
+        
+        # 1. Calculamos el siguiente user_id para este usuario
+        cursor.execute("SELECT MAX(user_id) FROM recordatorios WHERE chat_id = ?", (chat_id,))
+        ultimo_id = cursor.fetchone()[0]
+        nuevo_user_id = (ultimo_id or 0) + 1
+
+        # 2. Insertamos el nuevo recordatorio
         cursor.execute(
-            "INSERT INTO recordatorios (id, texto, fecha_hora, estado, aviso_previo, chat_id) VALUES (?, ?, ?, 0, ?, ?)",
-            (rid, texto, fecha_iso, aviso_previo, chat_id)
+            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, estado, aviso_previo) 
+               VALUES (?, ?, ?, ?, 0, ?)""",
+            (nuevo_user_id, chat_id, texto, fecha_iso, aviso_previo)
         )
+        # Obtenemos el ID autoincremental global que se acaba de crear
+        recordatorio_id_global = cursor.lastrowid
         conn.commit()
     
     fecha_str = fecha.strftime("%d %b %Y, %H:%M") if fecha else "Sin fecha"
-    mensaje_confirmacion = f"📝 *Recordatorio guardado:*\n`{rid}` - {texto} ({fecha_str})"
+    # Mostramos al usuario su ID secuencial
+    await update.message.reply_text(f"📝 Recordatorio guardado: `#{nuevo_user_id}` - {texto} ({fecha_str})", parse_mode="Markdown")
     
-    # Si hay un aviso previo, añadimos una línea extra al mensaje
-    if aviso_previo > 0:
-        # Reutilizamos la lógica para formatear el tiempo
-        horas = aviso_previo // 60
-        mins = aviso_previo % 60
-        tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-        
-        # Añadimos la información del aviso previo
-        mensaje_confirmacion += f"\n\n🔔 Se te avisará {tiempo_str} antes."
-
-    # Enviamos el mensaje completo al usuario
-    await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
-
-   
-    await programar_avisos(chat_id, rid, texto, fecha, aviso_previo)
+    # IMPORTANTE: APScheduler necesita un ID único GLOBAL. Usaremos el ID autoincremental.
+    await programar_avisos(chat_id, str(recordatorio_id_global), nuevo_user_id, texto, fecha, aviso_previo)
 
 async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data.clear()
     await update.message.reply_text("❌ Operación cancelada.")
     return ConversationHandler.END
 

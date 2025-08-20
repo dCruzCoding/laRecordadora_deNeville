@@ -29,7 +29,7 @@ def detener_scheduler():
     if scheduler.running:
         scheduler.shutdown()
 
-async def programar_avisos(chat_id: int, rid: str, texto: str, fecha: datetime, aviso_previo_min: int):
+async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fecha: datetime, aviso_previo_min: int):
     """Programa los avisos usando fechas "aware" (conscientes de la zona horaria)."""
     if not fecha:
         return
@@ -43,13 +43,13 @@ async def programar_avisos(chat_id: int, rid: str, texto: str, fecha: datetime, 
         'date',
         run_date=fecha_aware,
         id=f"recordatorio_{rid}",
-        args=[chat_id, rid, texto],
+        args=[chat_id, user_id, texto],
         misfire_grace_time=60,
         replace_existing=True
     )
 
     # Imprimimos la confirmación del aviso principal
-    print(f"✅ Recordatorio Programado: '{rid}' para las {fecha_aware.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"✅ Recordatorio programado: '{rid}' para las {fecha_aware.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Aviso previo
     if aviso_previo_min > 0:
@@ -61,7 +61,7 @@ async def programar_avisos(chat_id: int, rid: str, texto: str, fecha: datetime, 
                 'date',
                 run_date=aviso_time,
                 id=f"aviso_{rid}",
-                args=[chat_id, rid, texto, aviso_previo_min],
+                args=[chat_id, user_id, texto, aviso_previo_min],
                 misfire_grace_time=60,
                 replace_existing=True
             )
@@ -72,18 +72,18 @@ async def programar_avisos(chat_id: int, rid: str, texto: str, fecha: datetime, 
             tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
             
             # Imprimimos la confirmación del aviso previo
-            print(f"  🔔└─ Aviso Previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-async def enviar_recordatorio(chat_id: int, rid: str, texto: str):
+async def enviar_recordatorio(chat_id: int, user_id: int, texto: str):
     """Usa la variable global 'telegram_app' para enviar el mensaje."""
     if telegram_app:
         await telegram_app.bot.send_message(
             chat_id=chat_id,
-            text=f"⏰ *¡Es la hora!* `{rid}` - {texto}",
+            text=f"⏰ *¡Es la hora!* `{user_id}` - {texto}",
             parse_mode="Markdown"
         )
 
-async def enviar_aviso_previo(chat_id: int, rid: str, texto: str, minutos: int):
+async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: int):
     """Usa la variable global 'telegram_app' para enviar el aviso previo."""
     if telegram_app:
         horas = minutos // 60
@@ -92,7 +92,7 @@ async def enviar_aviso_previo(chat_id: int, rid: str, texto: str, minutos: int):
         
         await telegram_app.bot.send_message(
             chat_id=chat_id,
-            text=f"⚠️ *Aviso previo* ({tiempo_str} antes): `{rid}` - {texto}",
+            text=f"⚠️ *Aviso previo* ({tiempo_str} antes): `{user_id}` - {texto}",
             parse_mode="Markdown"
         )
 

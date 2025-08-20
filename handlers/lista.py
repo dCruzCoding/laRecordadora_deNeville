@@ -1,35 +1,16 @@
 from telegram import Update
 from telegram.ext import ContextTypes
 from db import get_connection, actualizar_recordatorios_pasados
-from utils import formatear_fecha_para_mensaje, formatear_lista_para_mensaje
+from utils import formatear_lista_para_mensaje
 from datetime import datetime, timedelta
 from config import ESTADOS  # Importamos los estados desde config
 
-def _build_list_string(reminders: list, show_aviso_info: bool = False) -> str:
-    """Función ayudante para formatear una lista de recordatorios en un string."""
-    lines = []
-    for rid, texto, fecha_iso, _, aviso_previo in reminders:
-        fecha_str = formatear_fecha_para_mensaje(fecha_iso)
-        
-        # Línea principal, ahora sin el estado
-        entry = f"`{rid}` - {texto} ({fecha_str})"
-        
-        # La información del aviso se añade si se especifica
-        if show_aviso_info:
-            if fecha_iso and aviso_previo and aviso_previo > 0:
-                fecha_recordatorio = datetime.fromisoformat(fecha_iso)
-                fecha_aviso = fecha_recordatorio - timedelta(minutes=aviso_previo)
-                aviso_info_str = f"🔔 Aviso a las: {fecha_aviso.strftime('%d %b, %H:%M')}"
-            else:
-                aviso_info_str = "🔕 Sin aviso programado"
-            entry += f"\n  └─ {aviso_info_str}"
-        lines.append(entry)
-    return "\n".join(lines)
-
 async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     actualizar_recordatorios_pasados()
+    chat_id = update.effective_chat.id
 
     filtro = None
+
     if context.args:
         arg = context.args[0].lower()
         if arg in ("pendientes", "pendiente"): filtro = 0
@@ -41,14 +22,17 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        query = "SELECT id, texto, fecha_hora, estado, aviso_previo FROM recordatorios"
-        params = []
+
+        query = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo FROM recordatorios WHERE chat_id = ?"
+        params = [chat_id]
+
         if filtro is not None:
-            query += " WHERE estado = ?"
+            query += " AND estado = ?"
             params.append(filtro)
+
         # Ordenamos por estado primero, y luego por fecha
-        query += " ORDER BY estado, CASE WHEN fecha_hora IS NULL THEN 1 ELSE 0 END, fecha_hora"
-        cursor.execute(query, params)
+        query += " ORDER BY estado, user_id"
+        cursor.execute(query, tuple(params))
         recordatorios = cursor.fetchall()
 
     if not recordatorios:
@@ -58,9 +42,9 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- NUEVA LÓGICA DE CONSTRUCCIÓN DEL MENSAJE ---
 
     # 1. Separamos los recordatorios en listas por categoría
-    pendientes = [r for r in recordatorios if r[3] == 0]
-    hechos = [r for r in recordatorios if r[3] == 1]
-    pasados = [r for r in recordatorios if r[3] == 2]
+    pendientes = [r for r in recordatorios if r[5] == 0]
+    hechos = [r for r in recordatorios if r[5] == 1]
+    pasados = [r for r in recordatorios if r[5] == 2]
 
     # 2. Construimos las secciones del mensaje solo para las listas que no están vacías
     secciones_mensaje = []

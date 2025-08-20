@@ -1,25 +1,23 @@
 import re
 from datetime import datetime, timedelta
-from dateparser.search import search_dates
-from config import MESES_SIGLAS        # <— antes .config
-from db import get_connection           # <— antes .db
+from dateparser.search import search_dates        
 
-def generar_id(fecha):
-    mes = fecha.month
-    sigla = MESES_SIGLAS[mes]
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id FROM recordatorios WHERE id LIKE ? ORDER BY id DESC LIMIT 1",
-            (f"{sigla}%",)
-        )
-        ultimo = cursor.fetchone()
-    if ultimo:
-        ultimo_num = int(ultimo[0][len(sigla):])
-        nuevo_num = ultimo_num + 1
-    else:
-        nuevo_num = 1
-    return f"{sigla}{nuevo_num:02d}"
+# def generar_id(fecha):
+#     mes = fecha.month
+#     sigla = MESES_SIGLAS[mes]
+#     with get_connection() as conn:
+#         cursor = conn.cursor()
+#         cursor.execute(
+#             "SELECT id FROM recordatorios WHERE id LIKE ? ORDER BY id DESC LIMIT 1",
+#             (f"{sigla}%",)
+#         )
+#         ultimo = cursor.fetchone()
+#     if ultimo:
+#         ultimo_num = int(ultimo[0][len(sigla):])
+#         nuevo_num = ultimo_num + 1
+#     else:
+#         nuevo_num = 1
+#     return f"{sigla}{nuevo_num:02d}"
 
 def normalizar_hora(texto):
     patron = r'(a las|a la) (\d{1,2})(?![:\d])'
@@ -79,15 +77,16 @@ def parsear_tiempo_a_minutos(valor: str):
 def formatear_lista_para_mensaje(recordatorios: list, mostrar_info_aviso: bool = False) -> str:
     """
     Toma una lista de recordatorios y la convierte en un string formateado para un mensaje.
-    - recordatorios: una lista de tuplas de la base de datos.
-    - mostrar_info_aviso: si es True, añade la línea de 'Aviso a las...'.
+    AHORA RECIBE 'user_id' en lugar de 'rid'.
     """
     lineas = []
-    for rid, texto, fecha_iso, _, aviso_previo in recordatorios:
+    # La tupla de recordatorio ahora es (id_global, user_id, chat_id, texto, fecha_iso, estado, aviso_previo)
+    # Solo necesitamos user_id, texto, fecha_iso y aviso_previo para mostrar
+    for _, user_id, _, texto, fecha_iso, _, aviso_previo in recordatorios:
         fecha_str = formatear_fecha_para_mensaje(fecha_iso)
         
-        # Línea principal, sin el estado
-        entrada = f"`{rid}` - {texto} ({fecha_str})"
+        # Línea principal, ahora con el user_id numérico
+        entrada = f"`#{user_id}` - {texto} ({fecha_str})"
         
         if mostrar_info_aviso:
             if fecha_iso and aviso_previo and aviso_previo > 0:

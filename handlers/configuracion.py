@@ -6,47 +6,63 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
+# Ahora necesitamos get_config para mostrar el estado actual
 from db import get_config, set_config
 
-ELEGIR_MODO = range(1)
+# Estados de la conversación (no cambian)
+ELEGIR_NIVEL = range(1)
 
-async def configuracion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Muestra la configuración actual y pide un nuevo valor."""
-    modo_seguro = int(get_config("modo_seguro") or 0)
-    texto_modo = (
-        "0 → 🔓 Sin confirmaciones.\n"
-        "1 → 🗑 Confirmar solo BORRAR.\n"
-        "2 → 🔄 Confirmar solo CAMBIAR ESTADO.\n"
-        "3 → 🔒 Confirmar ambos."
+async def configuracion_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Inicia la conversación para cambiar la configuración del modo seguro del usuario.
+    """
+    chat_id = update.effective_chat.id # <-- CAMBIO: Obtenemos el chat_id del usuario
+    
+    # <-- CAMBIO: Leemos la configuración actual de ESTE usuario para mostrarla
+    modo_seguro_actual = get_config(chat_id, "modo_seguro") or "0" # Por defecto es 0 si no existe
+    
+    mensaje = (
+        f"⚙️ *Configuración del Modo Seguro*\n\n"
+        f"El modo seguro te pide confirmación antes de borrar o cambiar el estado de un recordatorio.\n\n"
+        f"Tu nivel actual es: *{modo_seguro_actual}*\n\n"
+        "Elige un nuevo nivel (0-3):\n"
+        "  `0` → 🔓 Sin confirmaciones.\n"
+        "  `1` → 🗑 Confirmar solo al *borrar*.\n"
+        "  `2` → 🔄 Confirmar solo al *cambiar estado*.\n"
+        "  `3` → 🔒 Confirmar ambos."
     )
+    
+    await update.message.reply_text(mensaje, parse_mode="Markdown")
+    return ELEGIR_NIVEL
 
-    await update.message.reply_text(
-        f"*⚙️ Configuración de Modo Seguro*\n\n"
-        f"Valor actual: `{modo_seguro}`\n\n"
-        f"{texto_modo}\n\n"
-        f"✏️ Escribe el nuevo valor (0, 1, 2 o 3) o /cancelar para salir.",
-        parse_mode="Markdown"
-    )
-    return ELEGIR_MODO
+async def recibir_nivel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Recibe el nuevo nivel de modo seguro y lo guarda para el usuario específico.
+    """
+    nivel_str = update.message.text.strip()
+    
+    if nivel_str in ("0", "1", "2", "3"):
+        chat_id = update.effective_chat.id # <-- CAMBIO: Obtenemos el chat_id del usuario
+        
+        # <-- CAMBIO: Guardamos la configuración asociada a ESTE chat_id
+        set_config(chat_id, "modo_seguro", nivel_str)
+        
+        await update.message.reply_text(f"✅ Modo seguro establecido en: *{nivel_str}*", parse_mode="Markdown")
+        return ConversationHandler.END
+    else:
+        await update.message.reply_text("⚠️ Nivel no válido. Elige un número del 0 al 3.")
+        return ELEGIR_NIVEL
 
-async def recibir_modo(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    valor = update.message.text.strip()
-    if valor not in ("0", "1", "2", "3"):
-        await update.message.reply_text("⚠️ Valor inválido. Debe ser 0, 1, 2 o 3.")
-        return ELEGIR_MODO
-
-    set_config("modo_seguro", valor)
-    await update.message.reply_text(f"✅ Modo seguro actualizado a {valor}.")
+async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancela la operación de configuración."""
+    await update.message.reply_text("❌ Operación cancelada.")
     return ConversationHandler.END
 
-async def cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("❌ Configuración cancelada.")
-    return ConversationHandler.END
-
+# El ConversationHandler no cambia
 configuracion_handler = ConversationHandler(
     entry_points=[CommandHandler("configuracion", configuracion_cmd)],
     states={
-        ELEGIR_MODO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_modo)],
+        ELEGIR_NIVEL: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nivel)]
     },
     fallbacks=[CommandHandler("cancelar", cancelar)],
 )
