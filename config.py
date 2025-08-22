@@ -29,3 +29,8 @@ ESTADOS = {
     1: "✅ Hecho",
     2: "🗂️ Pasado"
 }
+
+COMANDOS_VALIDOS = [
+    "/start", "/info", "/ayuda", "/lista", "/recordar",
+    "/borrar", "/cambiar", "/ajustes", "/reset", "/cancelar"
+]

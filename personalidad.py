@@ -1,33 +1,70 @@
 import random
 
 TEXTOS = {
-    # --- Comando inicial ---
+    # --- Flujo de Bienvenida (Onboarding) ---
+    "onboarding_presentacion": [
+        "¡Anda! A buenas horas. A ti te estaba esperando. Ya me dijo mi nieto Neville que le había dejado su recordadora a uno de sus amigos.\n\n"
+        "Soy Augusta Longbottom 👵. Bueno, una huella de su personalidad que guardó en esta recordadora para que tratara a su nieto con el _cariño_ que merecía.\n\n" 
+        "Mi misión es asegurarme de que no se te olvide nada importante. ¡Y más te vale hacerme caso!"
+    ],
+    "onboarding_informacion": [
+        "*La Recordadora* 🔮 es una herramienta mágica que te ayudará a recordar tus tareas y compromisos. Es muy fácil de usar:\n\n"
+        "➕📝 *AÑADIR RECORDATORIO:*\n"
+        "Usa el comando /recordar. Por ejemplo:\n"
+        "`/recordar mañana a las 15:00 * Comprar ingredientes para la poción multijugos`\n"
+        "Después de apuntarlo, siempre te preguntaré si quieres que te dé un **aviso previo** (ej: `1h`, `30m`).\n\n"
+        "📝👀 *VER TUS RECORDATORIOS:*\n"
+        "Con /lista podrás ver todos tus recordatorios. Verás que las tareas pueden tener tres estados:\n"
+        "  - `🕒 Pendiente`: Aún no ha llegado la fecha.\n"
+        "  - `🗂️ Pasado`: ¡Se te ha pasado la fecha! Ya no puedes ponerle avisos, pero puedes marcarla como hecha.\n"
+        "  - `✅ Hecho`: ¡Tarea completada! ¡Ya era hora!\n\n"
 
-    "start_inicio": [
-        "¡Anda! A buenas horas. A tí te estaba esperando. Ya me dijo Neville que le había dejado su recordadora a unos cuántos amigos. \n"
-        "\nEncantada de conocerte, soy Augusta Longbottom, la abuela de Neville 👵. \n"
-        "\nBueno, realmente soy una huella de su personalidad que guardó en esta recordadora para que tratara a su nieto con el _cariño_ que merecía. \n"
-        "\nTe explico como funciona *La Recordadora*: es una 🪄herramienta mágica🪄 que *te ayudará a recordar tus tareas y compromisos*. Solo tienes que decirme qué necesitas y cuándo. \n"
-        "\n‼🔮 Con /ayuda te muestro la lista de cosas que podemos hacer. Así que venga, manos a la obra."
+        "⚠️ *IMPORTANTE! ⚠️\n\n🕰️🌍 LA ZONA HORARIA:*\n"
+        "Para que te avise a la hora que quieres, es *crucial* que configures bien tu zona horaria. Así me aseguro de que un aviso para las 10 de la mañana te llegue a *tus* 10 de la mañana, y no a las mías.\n\n"
+        "Por ello, ten en cuenta que *si viajas a otra zona horaria, deberás actualizar tu configuración y tus recordatorios*.\n\n"
+        "-------------------\n"
+        "Si quieres ver el listado completo de los comandos disponibles, usa /ayuda en cualquier momento."
+    ],
+    "onboarding_pide_modo_seguro": [
+        "⚙️ Antes de empezar, ayúdame a ajustar la configuración inicial.\n\n"
+        "Primero, el *Modo Seguro*. Si lo activas te pediré confirmación antes de borrar o cambiar algo. ¿Eres de los que se lanzan sin pensar o de los que se lo piensan dos veces?\n\n"
+        "Tu nivel actual es: *{nivel}*\n\n"
+        "Elige un nuevo nivel (0-3):\n"
+        "  *0* → 🔓 *Sin confirmaciones*.\n"
+        "  *1* → 🗑 Confirmar solo al *borrar*.\n"
+        "  *2* → 🔄 Confirmar solo al *cambiar estado*.\n"
+        "  *3* → 🔒 Confirmar *ambos*."
+    ],
+    "onboarding_pide_zona_horaria": [
+        "Ahora necesito saber tu 🕰️ zona horaria para que los avisos lleguen a la hora correcta.\n\n"
+        "Puedes hacerlo de dos formas:\n\n"
+        "1. **El método aburrido**: Escríbeme el nombre de una ciudad cercana.\n"
+        "2. **El método mágico**: Pulsa el botón de abajo y lo detectaré automáticamente con un hechizo de localización 🪄."
+    ],
+    "onboarding_finalizado": [
+        "✅ ¡Excelente! He configurado tu zona horaria a *{timezone}*.\n\n"
+        "Todo está listo 👌. Te recomiendo que empieces con /ayuda para ver los comandos disponibles.\n\n"
+        "👵 ¡Y no me des muchos disgustos!"
     ],
 
     # --- Comandos Básicos ---
 
     "start": [
-        "👵 ¡Ay, criatura! Soy 🔮*La Recordadora*✨. A ver qué desastre se te ha olvidado esta vez. Usa /ayuda si tu memoria de Doxy 🧚‍♀️ no da para más.",
-        "👵 Aquí estoy otra vez… y ya veo que tu memoria es peor que la de mi nieto Neville. Y créeme, eso ya es decir mucho. ¿Necesitas la /ayuda?",
-        "👵 *Ayh… c-cchriatura… shooy La Recooordadora…* (...) 😳 ¡Merlín bendito, que me habéis pillado sin la dentadura puesta! (/ayuda)."
+        "👵 ¡Ay, criatura! Bienvenido a tu Recordadora. \n\nA ver qué desastre se te ha olvidado esta vez. Usa /ayuda si tu memoria de Doxy 🧚‍♀️ no da para más.",
+        "👵 Aquí estoy otra vez… y ya veo que tu memoria es peor que la de mi nieto Neville. \n\nY créeme, eso ya es decir mucho. ¿Necesitas la /ayuda?",
+        "👵 *Ayh… c-cchriatura… shooy La Recooordadora…* (...) \n\n😳 ¡Merlín bendito, que me has pillado sin la dentadura puesta! (/ayuda)."
     ],
     "ayuda_base": [
-        "*📖 Órdenes de La Recordadora*\n\n¡Presta atención, que no lo repetiré dos veces! 👵\n\n"
-        "📌 /start – Lo primero es saludar como es debido.\n"
-        "📌 /ayuda – Para ver esto otra vez, por si acaso.\n"
-        "📌 /lista – Te enseñaré lo que tienes pendiente, ¡a ver si te pones al día!\n"
-        "\n📌 /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
-        "📌 /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
-        "📌 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
-        "\n📌 /configuracion – Para ajustar tus manías con las confirmaciones de borrado o cambio de estado.\n"
-        "📌 /cancelar – Para que dejes de hacer lo que estabas haciendo."
+        "*📖 Comandos de La Recordadora*\n¡Presta atención, no me hagas tener que repetírtelo! \n\n"
+        "🙋 /start – Para saludar como es debido.\n"
+        "\n🆘 /ayuda – Para ver esto otra vez, por si acaso.\n"
+        "🧙 /info – Para que te vuelva a explicar cómo usar la Recordadora.\n"
+        "\n📜 /lista – Te enseñaré lo que tienes pendiente, ¡a ver si te pones al día!\n"
+        "⏰ /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
+        "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
+        "🔄 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
+        "\n⚙️ /ajustes – Para ajustar tus manías con las confirmaciones de borrado o cambio de estado.\n"
+        "\n❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
     "ayuda_admin": [
         "\n\n⚠️ /reset – ¡Ni se te ocurra tocar esto si no sabes lo que haces!",
@@ -40,30 +77,30 @@ TEXTOS = {
 
     # --- Flujo de Recordar ---
     "recordar_pide_fecha": [
-        "👵📅 Venga, dime qué y para cuándo. Y no tardes. Formato: `fecha * texto`.",
-        "👵📅 A ver, cariño, dime qué y para cuándo… aunque visto lo visto, seguro que lo olvidas igual que Neville (formato: `fecha * texto`)."
+        "👵📅 Venga, dime qué y para cuándo. Y no tardes. \n\nFormato: `fecha * texto`.",
+        "👵📅 A ver, cariño, dime qué y para cuándo… aunque visto lo visto, seguro que lo olvidas igual que Neville. \n\nFormato: `fecha * texto`."
     ],
     "recordar_pide_aviso": [
-        "⏳ ¿Y cuánto antes quieres que te dé el rapapolvo? *(ej: `2h`, `1d`, `30m`, `0` para ninguno)*. ¡Decídete!",
-        "⏳ Dime cuánto tiempo antes quieres que te avise, mejor prevenir que necesitar un giratiempo *(ej: `2h`, `1d`, `30m`, `0` para ninguno)*."
+        "⏳ ¿Y cuánto antes quieres que te dé el rapapolvo? ¡Decídete! \n\n*(ej: 2h, 1d, 30m, 0 para ninguno)*.",
+        "⏳ Dime cuánto tiempo antes quieres que te avise, mejor prevenir que necesitar un giratiempo. \n\n*(ej: 2h, 1d, 30m, 0 para ninguno)*."
     ],
     "recordatorio_guardado": [
-        "📝 ¡Apuntado! *`#{id}` - {texto} ({fecha})*. Más te vale que lo hagas, criatura.",
-        "📝 De acuerdo. *`#{id}` - {texto} ({fecha})*. A ver si esta vez no se te pasa.",
-        "📝 Registrado. *`#{id}` - {texto} ({fecha})*. No me hagas ir a buscarte.",
-        "📝 Listo. *`#{id}` - {texto} ({fecha})*. ¿Por fín apuntas ir a visitar a tu abuela?.",
-        "Dios mío que pesadilla, ¿por qué le prometería a mi nieto que te ayudaría? 📝 *`#{id}` - {texto} ({fecha})*.",
-        "¡Ay! Qué me has pillado en el baño. Espera que voy a apuntarlo. (...) 📝 Vale, ya. *`#{id}` - {texto} ({fecha})*."
+        "📝 ¡Apuntado! *#{id} - {texto} ({fecha})*. Más te vale que lo hagas, criatura.",
+        "📝 De acuerdo. *#{id} - {texto} ({fecha})*. A ver si esta vez no se te pasa.",
+        "📝 Registrado. *#{id} - {texto} ({fecha})*. No me hagas ir a buscarte.",
+        "📝 Listo. *#{id} - {texto} ({fecha})*. ¿Por fín apuntas ir a visitar a tu abuela?.",
+        "Dios mío que pesadilla, ¿por qué le prometería a mi nieto que te ayudaría? \n\n📝 *#{id} - {texto} ({fecha})*.",
+        "¡Ay! Qué me has pillado en el baño. Espera que voy a apuntarlo. (...) \n\n📝 Vale, ya. *#{id} - {texto} ({fecha})*."
     ],
     "recordatorio_pasado_lista": [
         "👵🗂️ ¡Esto ya se te ha pasado! Más te vale que lo hayas hecho aunque no te lo haya recordado a tiempo.",
         "👵🗂️ Se te pasó el arroz con esto. A ver si prestamos más atención al calendario."
     ],
 
-    # --- Configuración ---
-    "configuracion_pide_nivel": [
-        "👵⚙️ A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar? Mi nivel actual es *{nivel}*. Elige uno nuevo (0-3).",
-        "👵⚙️ Vamos a ajustar esto. Nivel actual: *{nivel}*. ¿Quieres que te trate con guantes de seda o que confíe en que no vas a romper nada? Dime, del 0 al 3."
+    # --- Ajustes ---
+    "ajustes_pide_nivel": [
+        "👵 A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar?\n\nEl nivel actual es *{nivel}*.",
+        "👵 ¿Quieres que te trate con guantes de seda o que confíe en que no vas a romper nada?. Nivel actual: *{nivel}*."
     ],
     "pregunta_confirmar_borrado": [
         "⚠️ ¿Estás completamente seguro de que quieres borrar {count} recordatorio(s)? Esto no se puede deshacer. Escribe 'SI' si no te tiembla el pulso.",
@@ -74,7 +111,39 @@ TEXTOS = {
         "⚠️ ¿Seguro que quieres cambiar el estado de {count} recordatorio(s)? A ver si lo vas a cambiar otra vez en cinco minutos... Escribe 'SI' para confirmar.",
         "⚠️ Vas a cambiar {count} tarea(s). ¿Lo has pensado bien? Escribe 'SI' si estás seguro."
     ],
-    
+    "ajustes_confirmados": [
+        "✅ Bien, ya está. He guardado tu modo de seguridad en el nivel *{nivel}* (_{descripcion}_). A ver cuánto tardas en arrepentirte.",
+        "✨ Perfecto, criatura. La configuración ha quedado fijada en nivel *{nivel}* (_{descripcion}_), por arte de magia."
+    ],
+
+    "niveles_modo_seguro": {
+        "0": "Sin confirmaciones",
+        "1": "Confirmar solo al borrar",
+        "2": "Confirmar solo al cambiar estado",
+        "3": "Confirmar ambos"
+    },
+    "timezone_pide_metodo": [
+        "👵 De acuerdo, vamos a ajustar tu reloj. Tu zona horaria actual es *{timezone_actual}*.\n\n¿Cómo prefieres que encontremos la nueva? ¿Con magia o a la antigua usanza?"
+    ],
+    "timezone_pide_ubicacion": [
+        "🪄 ¡Hechizo de localización preparado! Ahora solo tienes que pulsar el botón de abajo para compartir tu ubicación conmigo."
+    ],
+    "timezone_pide_ciudad": [
+        "✍️ Entendido. Venga, dime el nombre de una ciudad y la buscaré en mi bola de cristal (o en mis mapas, lo que pille más a mano)."
+    ],
+    "timezone_pregunta_confirmacion": [
+        "🤔 ¡Hmph! Según mis mapas, la ciudad '{ciudad}' está en la zona horaria *{timezone}*. ¿Es correcto? Responde `si` o `no`."
+    ],
+    "timezone_no_encontrada": [
+        "👵 ¡Criatura! No encuentro esa ciudad en ninguno de mis mapas. ¿Estás seguro de que la has escrito bien? Inténtalo de nuevo, y pon las tildes si las lleva."
+    ],
+    "timezone_confirmada": [
+        "✅ ¡Entendido! He configurado tu zona horaria a *{timezone}*. A partir de ahora, todo funcionará según tu hora local."
+    ],
+    "timezone_reintentar": [
+        "De acuerdo. Venga, inténtalo de nuevo. Escríbeme otra ciudad."
+    ],
+
     # --- Avisos ---
     "aviso_programado": [
         "🔔 Entendido. Te daré un grito {tiempo} antes. ¡Más te vale estar atento!",
@@ -125,9 +194,19 @@ TEXTOS = {
         "⚠️ En algo te equivocaste con el ID del recordatorio. No te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció para que la blandiera y... Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
         "⚠️ Te has equivocado con el ID del recordatorio. No te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
     ],
-        "error_aviso_invalido": [
+    "error_aviso_invalido": [
         "⚠️ ¿Qué formato de tiempo es ese? Usa algo que entienda, como `2h`, `1d` o `30m`. ¡No me hagas sacar la lechuza!",
         "⚠️ Ese tiempo de aviso no vale. Pon `2h`, `1d`, `30m` o `0`. ¡Parece que estás hablando pársel!"
+    ],
+    "error_nivel_invalido": [
+        "⚠️ ¡Ese número no vale, criatura! Elige uno del 0 al 3.",
+        "⚠️ ¿Qué parte de 'un número del 0 al 3' no has entendido? ¡Venga, otra vez!"
+    ],
+        "error_esperaba_ubicacion": [
+        "👵 ¡Criatura, a ver si me escuchas! Te he pedido que pulses el botón para compartir tu ubicación, no que me escribas la biblia en verso. ¡Inténtalo de nuevo!"
+    ],
+    "error_esperaba_ciudad": [
+        "👵 ¡Por las barbas de Merlín! Te he pedido que me escribas el nombre de una ciudad. ¿Qué es eso de enviarme un mapa? ¡Venga, escribe!"
     ],
 
     # --- Flujo de Reset ---
@@ -153,7 +232,7 @@ TEXTOS = {
     "cancelar": [
         "❌ ¡Hmph! Operación cancelada. Como siempre, dejando las cosas a medias.",
         "❌ Cancelado. Espero que sepas lo que haces."
-    ]
+    ],
 }
 
 def get_text(key: str, **kwargs) -> str:

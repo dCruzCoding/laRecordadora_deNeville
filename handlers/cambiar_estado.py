@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 from datetime import datetime
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, cancelar_conversacion
+from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, manejar_cancelacion
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -54,7 +54,7 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
         secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(hechos)}")
 
     mensaje_final = "*🔄 Lista para Cambiar Estado:*\n\n" + "\n\n".join(secciones_mensaje)
-    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras cambiar de estado o /cancelar para salir:"
+    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras cambiar (separados por espacio y sin #) o /cancelar para salir:"
     
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
@@ -86,7 +86,16 @@ async def confirmar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_cambio(update, context)
     
-    return await cancelar_conversacion(update, context)
+    else:
+        # 1. Enviamos un mensaje de cancelación con la personalidad del bot
+        await update.message.reply_text(get_text("cancelar"))
+        
+        # 2. Limpiamos los datos de la conversación
+        if context.user_data:
+            context.user_data.clear()
+            
+        # 3. Terminamos la conversación explícitamente
+        return ConversationHandler.END
 
 async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -207,5 +216,7 @@ cambiar_estado_handler = ConversationHandler(
         CONFIRMAR_CAMBIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_cambio)],
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
+    fallbacks=[
+        CommandHandler("cancelar", manejar_cancelacion)
+    ]
 )

@@ -1,4 +1,4 @@
-from telegram import Update
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ContextTypes, 
     ConversationHandler, 
@@ -9,32 +9,127 @@ from telegram.ext import (
 from db import resetear_base_de_datos, get_config, set_config
 from avisos import cancelar_todos_los_avisos
 from config import OWNER_ID  
-from personalidad import get_text
-from utils import cancelar_conversacion
+from personalidad import get_text, TEXTOS
+from timezonefinderL import TimezoneFinder
+from geopy.geocoders import Nominatim
+from utils import manejar_cancelacion
 
-# Estado para la conversación de reseteo (no cambia)
-CONFIRMACION_RESET = range(1)
+# Estados para la nueva conversación de bienvenida
+PIDE_MODO_SEGURO, PIDE_ZONA_HORARIA = range(2)
 
+# --- COMANDO /INFO ---
+async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Muestra de nuevo la guía de uso de La Recordadora."""
+    await update.message.reply_text(get_text("onboarding_informacion"), parse_mode="Markdown")
+
+
+# --- NUEVA CONVERSACIÓN /START ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Da la bienvenida al usuario. Muestra un mensaje largo la primera vez
-    y mensajes cortos y aleatorios las veces siguientes.
-    """
+    """Inicia la conversación de bienvenida si es la primera vez."""
+    chat_id = update.effective_chat.id
+    onboarding_completo = get_config(chat_id, "onboarding_completo")
+
+    if onboarding_completo:
+        await update.message.reply_text(get_text("start"))
+        return ConversationHandler.END
+
+    # --- INICIO DEL ONBOARDING ---
+    # 1. Presentación de Augusta
+    await update.message.reply_text(get_text("onboarding_presentacion"), parse_mode="Markdown")
+    
+    # 2. Guía de uso (la misma que en /informacion)
+    await update.message.reply_text(get_text("onboarding_informacion"), parse_mode="Markdown")
+
+    # 3. Pedimos la primera configuración: Modo Seguro
+    mensaje_modo_seguro = get_text("onboarding_pide_modo_seguro", nivel='0')
+    await update.message.reply_text(mensaje_modo_seguro, parse_mode="Markdown")
+    return PIDE_MODO_SEGURO
+
+async def recibir_modo_seguro(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe el modo seguro y pide la zona horaria."""
+    nivel_str = update.message.text.strip()
     chat_id = update.effective_chat.id
     
-    # Comprobamos en la DB si el usuario ya ha iniciado el bot antes
-    usuario_ya_iniciado = get_config(chat_id, "usuario_iniciado")
+    if nivel_str in ("0", "1", "2", "3"):
+        set_config(chat_id, "modo_seguro", nivel_str)
 
-    if not usuario_ya_iniciado:
-        # Es la primera vez que este usuario inicia el bot
-        mensaje = get_text("start_inicio")
-        # Marcamos en la DB que el usuario ya ha recibido la bienvenida
-        set_config(chat_id, "usuario_iniciado", "1")
+        descripcion_nivel = TEXTOS["niveles_modo_seguro"].get(nivel_str, "Desconocido")
+
+        mensaje_confirmacion = get_text(
+            "configuracion_confirmada", 
+            nivel=nivel_str, 
+            descripcion=descripcion_nivel
+        )
+        await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
+
+
+        # 4. Pedimos la segunda configuración: Zona Horaria
+        location_keyboard = [[KeyboardButton("📍 Detectar mi Zona Horaria Automáticamente", request_location=True)]]
+        reply_markup = ReplyKeyboardMarkup(location_keyboard, resize_keyboard=True, one_time_keyboard=True)
+        await update.message.reply_text(get_text("onboarding_pide_zona_horaria"), reply_markup=reply_markup)
+        return PIDE_ZONA_HORARIA
     else:
-        # El usuario ya es un viejo conocido, le damos un saludo aleatorio
-        mensaje = get_text("start")
+        await update.message.reply_text(get_text("error_modo_invalido"))
+        return PIDE_MODO_SEGURO
+
+async def recibir_zona_horaria_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Recibe la zona horaria, la guarda y finaliza el onboarding."""
+    chat_id = update.effective_chat.id
+    user_timezone = None
     
-    await update.message.reply_text(mensaje, parse_mode="Markdown")
+    # Reutilizamos la misma lógica que el comando /timezone
+
+    if update.message.location:
+        # Método automático (ubicación)
+        lat = update.message.location.latitude
+        lon = update.message.location.longitude
+        tf = TimezoneFinder()
+        user_timezone = tf.timezone_at(lng=lon, lat=lat)
+
+    elif update.message.text:
+        # Método manual (texto)
+        try:
+            geolocator = Nominatim(user_agent="la_recordadora_bot")
+            location = geolocator.geocode(update.message.text)
+            if location:
+                tf = TimezoneFinder()
+                user_timezone = tf.timezone_at(lng=location.longitude, lat=location.latitude)
+            else:
+                await update.message.reply_text("🤔 Hmph, no encuentro esa ciudad. ¿Estás seguro de que la has escrito bien? Inténtalo de nuevo.")
+                return PIDE_ZONA_HORARIA
+        except Exception as e:
+            print(f"Error con geopy: {e}")
+            await update.message.reply_text("👵 ¡Ay, criatura! Ha habido un problema con mis mapas mágicos. Inténtalo de nuevo con otra ciudad.")
+            return PIDE_ZONA_HORARIA
+
+
+    if user_timezone:
+        set_config(chat_id, "user_timezone", user_timezone)
+        set_config(chat_id, "onboarding_completo", "1")
+        
+        mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
+        await update.message.reply_text(
+            mensaje_final,
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardRemove()
+        )
+        return ConversationHandler.END
+    
+    # Si algo falló, le volvemos a preguntar
+    await update.message.reply_text("🤔 Hmph, algo ha fallado. Inténtalo de nuevo, por favor.")
+    return PIDE_ZONA_HORARIA
+
+# Handler para la conversación de bienvenida
+start_handler = ConversationHandler(
+    entry_points=[CommandHandler("start", start)],
+    states={
+        PIDE_MODO_SEGURO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_modo_seguro)],
+        PIDE_ZONA_HORARIA: [MessageHandler(filters.LOCATION | filters.TEXT & ~filters.COMMAND, recibir_zona_horaria_onboarding)]
+    },
+    fallbacks=[
+        CommandHandler("cancelar", manejar_cancelacion)
+    ]
+)
 
 async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra la ayuda. El mensaje es dinámico dependiendo del usuario."""
@@ -44,6 +139,8 @@ async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
         mensaje += get_text("ayuda_admin")
     await update.message.reply_text(mensaje, parse_mode="Markdown")
 
+# Estado para la conversación de reseteo 
+CONFIRMACION_RESET = range(1)
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
@@ -73,5 +170,7 @@ reset_handler = ConversationHandler(
     states={
         CONFIRMACION_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_reset)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
+    fallbacks=[
+        CommandHandler("cancelar", manejar_cancelacion)
+    ]
 )

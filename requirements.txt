@@ -1,10 +1,12 @@
 APScheduler==3.11.0
 dateparser==1.2.2
+geopy==2.4.1
 python-telegram-bot==20.3
 pytz==2025.2
 regex==2025.7.34
 requests==2.32.4
 SQLAlchemy==2.0.43
+timezonefinderL==4.0.2
 tzdata==2025.2
 tzlocal==5.3.1
 Flask==3.1.1

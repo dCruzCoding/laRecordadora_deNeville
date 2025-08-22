@@ -1,9 +1,16 @@
 import re
+import random
 from datetime import datetime, timedelta
 from dateparser.search import search_dates
 from personalidad import get_text
-from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler        
+from telegram import Update, ReplyKeyboardRemove
+from telegram.ext import (
+    ContextTypes,
+    ConversationHandler, 
+    CommandHandler, 
+    MessageHandler, 
+    filters
+)
 
 def normalizar_hora(texto):
     patron = r'(a las|a la) (\d{1,2})(?![:\d])'
@@ -86,13 +93,18 @@ def formatear_lista_para_mensaje(recordatorios: list, mostrar_info_aviso: bool =
     return "\n".join(lineas)
 
 
-async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def manejar_cancelacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Función genérica para cancelar cualquier ConversationHandler.
-    Limpia los datos de usuario y envía un mensaje de cancelación.
+    Función genérica para el fallback de /cancelar.
+    Limpia datos, teclado y envía un mensaje de confirmación.
     """
+    # Limpiamos los datos de la conversación por si acaso
     if context.user_data:
         context.user_data.clear()
-
-    await update.message.reply_text(get_text("cancelar"))
+        
+    await update.message.reply_text(
+        text=get_text("cancelar"),
+        reply_markup=ReplyKeyboardRemove()
+    )
+    
     return ConversationHandler.END

@@ -9,7 +9,7 @@ from telegram.ext import (
     filters
 )
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, cancelar_conversacion
+from utils import formatear_lista_para_mensaje, manejar_cancelacion
 from avisos import cancelar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -52,7 +52,7 @@ async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(hechos)}")
 
     mensaje_final = "*BORRAR 🗑 :*\n\n" + "\n\n".join(secciones_mensaje)
-    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras borrar (separados por espacio) o /cancelar si quieres salir:"
+    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras borrar (separados por espacio y sin #) o /cancelar si quieres salir:"
     
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
@@ -88,8 +88,16 @@ async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Se activa después de que el usuario escribe 'SI'."""
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_borrado(update, context)
+    else:
+        # 1. Enviamos un mensaje de cancelación con la personalidad del bot
+        await update.message.reply_text(get_text("cancelar"))
+        
+        # 2. Limpiamos los datos de la conversación
+        if context.user_data:
+            context.user_data.clear()
+        
+        return ConversationHandler.END
     
-    return await cancelar_conversacion(update, context) # <-- Usamos la función centralizada
 
 async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Lógica final de borrado."""
@@ -131,5 +139,7 @@ borrar_handler = ConversationHandler(
         ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids)],
         CONFIRMAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_borrado)]
     },
-    fallbacks=[CommandHandler("cancelar", cancelar_conversacion)],
+    fallbacks=[
+        CommandHandler("cancelar", manejar_cancelacion)
+    ]
 )
