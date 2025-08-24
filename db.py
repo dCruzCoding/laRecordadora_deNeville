@@ -131,8 +131,8 @@ def actualizar_recordatorios_pasados():
     Esta función es clave para la nueva lógica automática.
     """
     # Usamos la misma zona horaria que el scheduler para consistencia
-    now_aware = datetime.now(pytz.timezone('Europe/Madrid')) # <-- ¡Usa tu zona horaria!
-    now_iso = now_aware.isoformat()
+    now_utc = datetime.now(pytz.utc)
+    now_utc_iso = now_utc.isoformat()
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -143,7 +143,7 @@ def actualizar_recordatorios_pasados():
             SET estado = 2 
             WHERE estado = 0 AND fecha_hora IS NOT NULL AND fecha_hora < ?
             """,
-            (now_iso,)
+            (now_utc_iso,)
         )
         # Devolvemos el número de filas cambiadas, útil para depurar
         changed_rows = cursor.rowcount

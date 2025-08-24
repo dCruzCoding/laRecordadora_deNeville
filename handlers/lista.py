@@ -23,52 +23,43 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with get_connection() as conn:
         cursor = conn.cursor()
-
         query = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo FROM recordatorios WHERE chat_id = ?"
         params = [chat_id]
-
         if filtro is not None:
             query += " AND estado = ?"
             params.append(filtro)
-
-        # Ordenamos por estado primero, y luego por fecha
         query += " ORDER BY estado, user_id"
         cursor.execute(query, tuple(params))
         recordatorios = cursor.fetchall()
 
     if not recordatorios:
-        # <-- CAMBIO: Mensaje para cuando no hay nada en la lista
-        mensaje_vacio = get_text("lista_vacia")
-        await update.message.reply_text(mensaje_vacio)
+        await update.message.reply_text(get_text("lista_vacia"))
         return
 
-    # Separamos los recordatorios en listas por categoría
     pendientes = [r for r in recordatorios if r[5] == 0]
     hechos = [r for r in recordatorios if r[5] == 1]
     pasados = [r for r in recordatorios if r[5] == 2]
 
-    # Construimos las secciones del mensaje solo para las listas que no están vacías
     secciones_mensaje = []
     if pendientes:
         titulo = f"*{ESTADOS[0]}:*"
         # Usamos la nueva función centralizada
-        items = formatear_lista_para_mensaje(pendientes, mostrar_info_aviso=True)
+        items = formatear_lista_para_mensaje(chat_id, pendientes, mostrar_info_aviso=True)
         secciones_mensaje.append(f"{titulo}\n{items}")
         
     if pasados:
         titulo = f"*{ESTADOS[2]}:*"
-        items = formatear_lista_para_mensaje(pasados)
+        items = formatear_lista_para_mensaje(chat_id, pasados)
         secciones_mensaje.append(f"{titulo}\n{items}")
 
     if hechos:
         titulo = f"*{ESTADOS[1]}:*"
-        items = formatear_lista_para_mensaje(hechos)
+        items = formatear_lista_para_mensaje(chat_id, hechos)
         secciones_mensaje.append(f"{titulo}\n{items}")
-
-    # Construimos el mensaje final
+        
     mensaje_final = "\n\n".join(secciones_mensaje)
 
     if pendientes:
-        mensaje_final += "\n\n" + "---" + "\n_Venga, a trabajar. ¡Que no se diga que los Longbottom nos juntamos con vagos!_"
+        mensaje_final += "\n\n---\n_Venga, a trabajar. ¡Que no se diga que los Longbottom son unos vagos!_"
 
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")

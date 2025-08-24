@@ -9,7 +9,7 @@ from telegram.ext import (
     filters
 )
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, manejar_cancelacion
+from utils import formatear_lista_para_mensaje, manejar_cancelacion, formatear_fecha_para_mensaje
 from avisos import cancelar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -45,11 +45,11 @@ async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     secciones_mensaje = []
     if pendientes:
-        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(pendientes)}")
+        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(chat_id, pendientes)}")
     if pasados:
-        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(pasados)}")
+        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(chat_id, pasados)}")
     if hechos:
-        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(hechos)}")
+        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(chat_id, hechos)}")
 
     mensaje_final = "*BORRAR 🗑 :*\n\n" + "\n\n".join(secciones_mensaje)
     mensaje_final += "\n\n✏️ Escribe el/los ID que quieras borrar (separados por espacio y sin #) o /cancelar si quieres salir:"

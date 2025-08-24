@@ -181,8 +181,8 @@ TEXTOS = {
     "error_formato": [
         "❗ ¡Así no, criatura! El formato es `fecha * texto`. ¡Concéntrate!",
         "❗ ¿Pero qué escribes? Tiene que ser `fecha * texto`. A veces pienso que te criaron los gnomos de jardín.",
-        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. No te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció y... Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
-        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. No te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
+        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció y... \n\n Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
+        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
     ],
     "error_no_id": [
         "⚠️ ¡Desastre! No he encontrado ningún recordatorio tuyo con esos números.",

@@ -10,12 +10,11 @@ from personalidad import get_text
 telegram_app: Application = None
 
 # --- Configuración del Scheduler ---
-# ¡IMPORTANTE! Añadimos una zona horaria. Cámbiala por la tuya.
 scheduler = AsyncIOScheduler(
     jobstores={
         'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')
     },
-    timezone=pytz.timezone('Europe/Madrid') 
+    timezone=pytz.utc
 )
 
 async def iniciar_scheduler(app: Application):
@@ -35,14 +34,11 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
     if not fecha:
         return
 
-    # Nos aseguramos de que la fecha tenga la misma zona horaria que el scheduler
-    fecha_aware = fecha.replace(tzinfo=scheduler.timezone) if fecha.tzinfo is None else fecha
-
     # Aviso principal
     scheduler.add_job(
         enviar_recordatorio,
         'date',
-        run_date=fecha_aware,
+        run_date=fecha,
         id=f"recordatorio_{rid}",
         args=[chat_id, user_id, texto],
         misfire_grace_time=60,
@@ -50,11 +46,11 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
     )
 
     # Imprimimos la confirmación del aviso principal
-    print(f"✅ Recordatorio programado: '{rid}' para las {fecha_aware.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"✅ Recordatorio programado: '{rid}' para las {fecha.strftime('%Y-%m-%d %H:%M:%S')}")
 
     # Aviso previo
     if aviso_previo_min > 0:
-        aviso_time = fecha_aware - timedelta(minutes=aviso_previo_min)
+        aviso_time = fecha - timedelta(minutes=aviso_previo_min)
         # Comparamos con la hora actual con zona horaria
         if aviso_time > datetime.now(tz=scheduler.timezone):
             scheduler.add_job(

@@ -48,11 +48,11 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     secciones_mensaje = []
     if pendientes:
-        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(pendientes)}")
+        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(chat_id, pendientes)}")
     if pasados:
-        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(pasados)}")
+        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(chat_id, pasados)}")
     if hechos:
-        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(hechos)}")
+        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(chat_id, hechos)}")
 
     mensaje_final = "*🔄 Lista para Cambiar Estado:*\n\n" + "\n\n".join(secciones_mensaje)
     mensaje_final += "\n\n✏️ Escribe el/los ID que quieras cambiar (separados por espacio y sin #) o /cancelar para salir:"

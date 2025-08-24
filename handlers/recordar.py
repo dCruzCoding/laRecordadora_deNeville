@@ -6,7 +6,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from utils import parsear_recordatorio, parsear_tiempo_a_minutos, manejar_cancelacion
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos, manejar_cancelacion, convertir_utc_a_local
 from db import get_connection, get_config
 from avisos import programar_avisos
 from personalidad import get_text
@@ -74,7 +74,9 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
         "fecha": fecha
     }
 
-    fecha_str = fecha.strftime("%d %b %Y, %H:%M") if fecha else "Sin fecha"
+    fecha_local_para_mostrar = convertir_utc_a_local(fecha, user_tz)
+
+    fecha_str = fecha_local_para_mostrar.strftime("%d %b %Y, %H:%M") if fecha_local_para_mostrar else "Sin fecha"
     mensaje_guardado = get_text("recordatorio_guardado", id=nuevo_user_id, texto=texto, fecha=fecha_str)
     await update.message.reply_text(mensaje_guardado, parse_mode="Markdown")
 
