@@ -1,15 +1,11 @@
 import re
-import random
 from datetime import datetime, timedelta
 from dateparser.search import search_dates
 from personalidad import get_text
 from telegram import Update, ReplyKeyboardRemove
 from telegram.ext import (
     ContextTypes,
-    ConversationHandler, 
-    CommandHandler, 
-    MessageHandler, 
-    filters
+    ConversationHandler
 )
 
 def normalizar_hora(texto):
@@ -27,17 +23,21 @@ def limpiar_texto_sin_fecha(texto, texto_fecha):
     else:
         return texto
 
-def parsear_recordatorio(texto_entrada):
+def parsear_recordatorio(texto_entrada, user_timezone='UTC'):
     if "*" not in texto_entrada:
         return None, None, "❗ Formato inválido. Usa: fecha * texto"
     parte_fecha, parte_texto = texto_entrada.split("*", 1)
     parte_fecha = normalizar_hora(parte_fecha.strip())
-    fechas = search_dates(parte_fecha, languages=['es'], settings={'PREFER_DATES_FROM': 'future'})
+
+    settings = {'PREFER_DATES_FROM': 'future', 'TIMEZONE': user_timezone}
+    fechas = search_dates(parte_fecha, languages=['es'], settings=settings)
+
     if fechas:
         texto_fecha, fecha = fechas[0]
         texto = limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()
         texto = texto.strip()
-        return texto, fecha, None
+        texto_capital = texto.capitalize()
+        return texto_capital, fecha, None
     else:
         return None, None, "❗ No se pudo detectar fecha/hora en la parte izquierda"
 

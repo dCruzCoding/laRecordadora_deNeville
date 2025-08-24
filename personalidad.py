@@ -36,10 +36,7 @@ TEXTOS = {
         "  *3* → 🔒 Confirmar *ambos*."
     ],
     "onboarding_pide_zona_horaria": [
-        "Ahora necesito saber tu 🕰️ zona horaria para que los avisos lleguen a la hora correcta.\n\n"
-        "Puedes hacerlo de dos formas:\n\n"
-        "1. **El método aburrido**: Escríbeme el nombre de una ciudad cercana.\n"
-        "2. **El método mágico**: Pulsa el botón de abajo y lo detectaré automáticamente con un hechizo de localización 🪄."
+        "👵 Ahora vamos a ajustar tu reloj.\n\n¿Cómo prefieres que encontremos la zona horaria? ¿Con magia o a la antigua usanza?"
     ],
     "onboarding_finalizado": [
         "✅ ¡Excelente! He configurado tu zona horaria a *{timezone}*.\n\n"

@@ -69,34 +69,61 @@ async def recibir_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def _procesar_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids: list):
     """
-    Función centralizada. Guarda los IDs y decide si pedir confirmación
-    basándose en el modo_seguro.
+    Función centralizada. Ahora busca los detalles de los recordatorios
+    y los muestra en la pregunta de confirmación.
     """
     chat_id = update.effective_chat.id
-    context.user_data["ids_a_borrar"] = ids
+    recordatorios_a_borrar_info = []
+    
+    # --- ¡NUEVA LÓGICA DE BÚSQUEDA! ---
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        for user_id_str in ids:
+            try:
+                user_id = int(user_id_str.replace("#", ""))
+                cursor.execute(
+                    "SELECT user_id, texto, fecha_hora FROM recordatorios WHERE user_id = ? AND chat_id = ?",
+                    (user_id, chat_id)
+                )
+                row = cursor.fetchone()
+                if row:
+                    recordatorios_a_borrar_info.append(row)
+            except (ValueError, TypeError):
+                pass
+
+    if not recordatorios_a_borrar_info:
+        await update.message.reply_text(get_text("error_no_id"))
+        return ConversationHandler.END
+
+    # Guardamos tanto los IDs como la información detallada para usarla después
+    context.user_data["ids_a_borrar"] = [str(r[0]) for r in recordatorios_a_borrar_info]
+    context.user_data["info_a_borrar"] = recordatorios_a_borrar_info
     
     modo_seguro = int(get_config(chat_id, "modo_seguro") or 0)
     if modo_seguro in (1, 3):
-        mensaje_confirmacion = get_text("pregunta_confirmar_borrado", count=len(ids))
-        await update.message.reply_text(mensaje_confirmacion)
+        # --- MENSAJE DE CONFIRMACIÓN MEJORADO ---
+        mensaje_lista = []
+        for user_id, texto, fecha_iso in recordatorios_a_borrar_info:
+            fecha_str = formatear_fecha_para_mensaje(fecha_iso)
+            mensaje_lista.append(f"  - `#{user_id}`: _{texto}_ ({fecha_str})")
+            
+        mensaje_confirmacion = (
+            f"👵 ¡Quieto ahí! Vas a borrar permanentemente lo siguiente:\n\n"
+            f"{'\n'.join(mensaje_lista)}\n\n"
+            "¿Estás completamente seguro? Escribe `SI` para confirmar."
+        )
+        await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
         return CONFIRMAR
     
-    # Si no se necesita confirmación, ejecutamos el borrado directamente.
     return await ejecutar_borrado(update, context)
+
 
 async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Se activa después de que el usuario escribe 'SI'."""
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_borrado(update, context)
-    else:
-        # 1. Enviamos un mensaje de cancelación con la personalidad del bot
-        await update.message.reply_text(get_text("cancelar"))
-        
-        # 2. Limpiamos los datos de la conversación
-        if context.user_data:
-            context.user_data.clear()
-        
-        return ConversationHandler.END
+    
+    return await manejar_cancelacion(update, context)
     
 
 async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -124,10 +151,18 @@ async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
         conn.commit()
     
     if borrados_msg_list:
-        mensaje_exito = get_text("confirmacion_borrado", ids=', '.join(borrados_msg_list)) 
-        await update.message.reply_text(mensaje_exito)
+        info_borrada = context.user_data.get("info_a_borrar", [])
+        
+        if len(info_borrada) == 1:
+            recordatorio = info_borrada[0]
+            mensaje_exito = f"🗑️ ¡Listo! El recordatorio `#{recordatorio[0]}` ('_{recordatorio[1]}_') ha sido borrado."
+        else:
+            nombres_borrados = [f"`#{r[0]}`" for r in info_borrada]
+            mensaje_exito = f"🗑️ ¡Hecho! Los recordatorios {', '.join(nombres_borrados)} han sido borrados."
+            
+        await update.message.reply_text(mensaje_exito, parse_mode="Markdown")
     else:
-        await update.message.reply_text(get_text("error_no_id")) 
+        await update.message.reply_text(get_text("error_no_id"))
     
     context.user_data.clear()
     return ConversationHandler.END

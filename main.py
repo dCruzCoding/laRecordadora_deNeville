@@ -1,10 +1,9 @@
 import threading
-import asyncio
 from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
 from config import TOKEN
 from db import crear_tablas
-from handlers import start_help_reset, lista, recordar, cambiar_estado, borrar, ajustes
+from handlers import lista, recordar, cambiar_estado, borrar, ajustes, help_reset, start_onboarding
 import avisos
 
 # --- Parte 1: El Servidor Web para Render (sin cambios) ---
@@ -32,11 +31,11 @@ def run_telegram_bot():
 
     # --- GRUPO 0: TUS CONVERSACIONES Y COMANDOS NORMALES ---
     # 1. Conversación de Bienvenida (Onboarding)
-    app.add_handler(start_help_reset.start_handler)
+    app.add_handler(start_onboarding.start_handler)
 
     # 2. Comandos Básicos y de Ayuda
-    app.add_handler(CommandHandler("info", start_help_reset.info))
-    app.add_handler(CommandHandler("ayuda", start_help_reset.ayuda))
+    app.add_handler(CommandHandler("info", start_onboarding.info))
+    app.add_handler(CommandHandler("ayuda", help_reset.ayuda))
 
     # 3. Comandos de Gestión de Recordatorios
     app.add_handler(CommandHandler("lista", lista.lista))
@@ -48,11 +47,11 @@ def run_telegram_bot():
     app.add_handler(ajustes.ajustes_handler)
 
     # 5. Comandos de Administrador
-    app.add_handler(start_help_reset.reset_handler)
+    app.add_handler(help_reset.reset_handler)
 
     print("🤖 La Recordadora (bot de Telegram) está en marcha...")
     try:
-        app.add_handler(start_help_reset.start_handler)
+        app.add_handler(start_onboarding.start_handler)
         app.run_polling()
     finally:
         avisos.detener_scheduler()

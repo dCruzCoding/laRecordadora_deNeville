@@ -7,7 +7,7 @@ from telegram.ext import (
     filters
 )
 from utils import parsear_recordatorio, parsear_tiempo_a_minutos, manejar_cancelacion
-from db import get_connection
+from db import get_connection, get_config
 from avisos import programar_avisos
 from personalidad import get_text
 
@@ -34,17 +34,23 @@ async def recibir_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE, entrada: str):
     """
     Función centralizada para procesar el recordatorio, guardarlo y pedir el aviso.
+    AHORA CON SOPORTE PARA ZONA HORARIA.
     """
-    texto, fecha, error = parsear_recordatorio(entrada)
+    chat_id = update.effective_chat.id # Movemos esto al principio para usarlo ya
+
+    # --- ¡CAMBIO 1: Obtener la zona horaria del usuario! ---
+    # Leemos la zona horaria guardada en la DB. Si no existe, usamos 'UTC' como valor por defecto seguro.
+    user_tz = get_config(chat_id, "user_timezone") or 'UTC'
+
+    # --- ¡CAMBIO 2: Usar la zona horaria al parsear! ---
+    # Ahora le pasamos la zona horaria del usuario a la función de parseo.
+    texto, fecha, error = parsear_recordatorio(entrada, user_timezone=user_tz)
+
     if error:
         await update.message.reply_text(get_text("error_formato"))
-        # Si estamos en el modo interactivo, le volvemos a preguntar
         return FECHA_TEXTO if not context.args else ConversationHandler.END
 
     # --- NUEVO FLUJO ---
-    # 1. Guardamos el recordatorio en la base de datos INMEDIATAMENTE
-    #    Por ahora, el aviso_previo será 0 por defecto.
-    chat_id = update.effective_chat.id
     fecha_iso = fecha.isoformat() if fecha else None
     
     with get_connection() as conn:
@@ -55,13 +61,12 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
 
         cursor.execute(
             """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, estado, aviso_previo) 
-               VALUES (?, ?, ?, ?, 0, 0)""", # Aviso_previo es 0 por ahora
+               VALUES (?, ?, ?, ?, 0, 0)""",
             (nuevo_user_id, chat_id, texto, fecha_iso)
         )
         recordatorio_id_global = cursor.lastrowid
         conn.commit()
 
-    # 2. Guardamos la información clave en el contexto para el siguiente paso
     context.user_data["recordatorio_info"] = {
         "global_id": recordatorio_id_global,
         "user_id": nuevo_user_id,
@@ -69,12 +74,10 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
         "fecha": fecha
     }
 
-    # 3. Enviamos la confirmación de guardado INMEDIATAMENTE
     fecha_str = fecha.strftime("%d %b %Y, %H:%M") if fecha else "Sin fecha"
     mensaje_guardado = get_text("recordatorio_guardado", id=nuevo_user_id, texto=texto, fecha=fecha_str)
     await update.message.reply_text(mensaje_guardado, parse_mode="Markdown")
 
-    # 4. Preguntamos por el aviso previo
     await update.message.reply_text(get_text("recordar_pide_aviso"), parse_mode="Markdown")
     return AVISO_PREVIO
 
