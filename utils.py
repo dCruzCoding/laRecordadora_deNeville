@@ -117,7 +117,7 @@ def formatear_lista_para_mensaje(chat_id: int, recordatorios: list, mostrar_info
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
     lineas = []
     
-    for _, user_id, _, texto, fecha_iso, _, aviso_previo in recordatorios:
+    for _, user_id, chat_id, texto, fecha_iso, estado, aviso_previo, timezone in recordatorios:
         # Primero, manejamos el caso de que no haya fecha
         if not fecha_iso:
             lineas.append(f"`#{user_id}` - {texto} (Sin fecha)")
@@ -125,7 +125,8 @@ def formatear_lista_para_mensaje(chat_id: int, recordatorios: list, mostrar_info
 
         # --- CONVERSIÓN A LOCAL (Punto único de verdad para la fecha) ---
         fecha_utc = datetime.fromisoformat(fecha_iso)
-        fecha_local = convertir_utc_a_local(fecha_utc, user_tz)
+        tz_para_mostrar = timezone or 'UTC'
+        fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
         fecha_str = fecha_local.strftime("%d %b %Y, %H:%M")
         
         # Línea principal

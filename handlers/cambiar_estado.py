@@ -33,7 +33,7 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
+            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
             (chat_id,)
         )
         recordatorios = cursor.fetchall()

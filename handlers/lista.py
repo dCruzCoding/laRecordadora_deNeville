@@ -23,7 +23,7 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        query = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo FROM recordatorios WHERE chat_id = ?"
+        query = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ?"
         params = [chat_id]
         if filtro is not None:
             query += " AND estado = ?"

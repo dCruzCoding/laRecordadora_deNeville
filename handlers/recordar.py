@@ -60,9 +60,9 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
         nuevo_user_id = (ultimo_id or 0) + 1
 
         cursor.execute(
-            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, estado, aviso_previo) 
-               VALUES (?, ?, ?, ?, 0, 0)""",
-            (nuevo_user_id, chat_id, texto, fecha_iso)
+            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone) 
+               VALUES (?, ?, ?, ?, 0, 0, ?)""",
+            (nuevo_user_id, chat_id, texto, fecha_iso, user_tz)
         )
         recordatorio_id_global = cursor.lastrowid
         conn.commit()

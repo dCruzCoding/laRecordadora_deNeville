@@ -15,7 +15,7 @@ from telegram.ext import (
     filters
 )
 # Ahora necesitamos get_config para mostrar el estado actual
-from db import get_config, set_config
+from db import get_config, set_config, get_connection
 from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
@@ -27,7 +27,8 @@ MODO_SEGURO_MENU, \
 ZONA_HORARIA_MENU, \
 ZONA_HORARIA_PIDE_UBICACION, \
 ZONA_HORARIA_PIDE_CIUDAD, \
-ZONA_HORARIA_CONFIRMAR_CIUDAD = range(6)
+ZONA_HORARIA_CONFIRMAR_CIUDAD, \
+CONFIRMAR_ACTUALIZACION_TZ = range(7)
 
 # --- INICIO Y MENÚ PRINCIPAL ---
 async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -148,16 +149,9 @@ async def recibir_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     user_timezone = tf.timezone_at(lng=lon, lat=lat)
 
     if user_timezone:
-        # Caso de éxito (sin cambios)
-        set_config(chat_id, "user_timezone", user_timezone)
-        mensaje_confirmacion = get_text("timezone_confirmada", timezone=user_timezone)
-        await update.message.reply_text(
-            mensaje_confirmacion, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove()
-        )
-        # Terminamos la conversación con éxito
-        return ConversationHandler.END
+        return await _guardar_y_preguntar_actualizacion_tz(update, context, user_timezone)
+    
     else:
-
         # Caso de fallo: no se encontró zona horaria
         # 1. Enviamos un mensaje de error al usuario
         await update.message.reply_text(
@@ -206,29 +200,62 @@ async def error_pide_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 async def confirmar_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recibe el SÍ/NO del usuario para la zona horaria."""
-    chat_id = update.effective_chat.id
     respuesta = update.message.text.strip().upper()
-
     if respuesta == "SI":
         user_timezone = context.user_data.get("timezone_a_confirmar")
         if user_timezone:
-            set_config(chat_id, "user_timezone", user_timezone)
-            mensaje_confirmacion = get_text("timezone_confirmada", timezone=user_timezone)
-            await update.message.reply_text(
-                mensaje_confirmacion,
-                parse_mode="Markdown",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            context.user_data.clear()
-            return ConversationHandler.END
+            return await _guardar_y_preguntar_actualizacion_tz(update, context, user_timezone)
     elif respuesta == "NO":
         await update.message.reply_text(get_text("timezone_reintentar"))
-        return ZONA_HORARIA_PIDE_CIUDAD # <-- Lo devolvemos al paso de escribir la ciudad
+        return ZONA_HORARIA_PIDE_CIUDAD
     else:
         await update.message.reply_text("👵 ¡Criatura! Solo entiendo `SI` o `NO`. Venga, otra vez.")
-        return ZONA_HORARIA_CONFIRMAR_CIUDAD # <-- Le volvemos a preguntar SÍ/NO
+        return ZONA_HORARIA_CONFIRMAR_CIUDAD
+    # Si algo falla (ej. se pierde el user_data), cancelamos
+    return await manejar_cancelacion(update, context)
 
+async def _guardar_y_preguntar_actualizacion_tz(update: Update, context: ContextTypes.DEFAULT_TYPE, nueva_tz: str):
+    """Función ayudante: Guarda la nueva TZ y pregunta si se actualizan los recordatorios antiguos."""
+    chat_id = update.effective_chat.id
+    set_config(chat_id, "user_timezone", nueva_tz)
+    context.user_data["nueva_tz"] = nueva_tz
+    
+    keyboard = [
+        [InlineKeyboardButton("Sí, actualízalos a la nueva zona horaria", callback_data="tz_update_yes")],
+        [InlineKeyboardButton("No, déjalos con su hora original", callback_data="tz_update_no")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
 
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=f"✅ ¡Perfecto! Tu nueva zona horaria es *{nueva_tz}*.",
+        parse_mode="Markdown",
+        reply_markup=ReplyKeyboardRemove()
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text="He visto que puedes tener recordatorios creados en otras zonas horarias. ¿Qué hacemos con ellos?",
+        reply_markup=reply_markup
+    )
+    return CONFIRMAR_ACTUALIZACION_TZ
+
+async def procesar_actualizacion_tz(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Se activa cuando el usuario responde SÍ o NO a la actualización."""
+    query = update.callback_query
+    await query.answer()
+    chat_id = update.effective_chat.id
+    
+    if query.data == "tz_update_yes":
+        nueva_tz = context.user_data.get("nueva_tz")
+        with get_connection() as conn:
+            conn.execute("UPDATE recordatorios SET timezone = ? WHERE chat_id = ?", (nueva_tz, chat_id))
+            conn.commit()
+        await query.edit_message_text("✅ ¡Entendido! He actualizado todos tus recordatorios a tu nueva zona horaria.")
+    else: # tz_update_no
+        await query.edit_message_text("👍 De acuerdo. Tus recordatorios antiguos conservarán la zona horaria con la que fueron creados.")
+        
+    context.user_data.clear()
+    return ConversationHandler.END
 
 # --- Construcción del ConversationHandler Unificado ---
 ajustes_handler = ConversationHandler(
@@ -239,7 +266,7 @@ ajustes_handler = ConversationHandler(
             CallbackQueryHandler(menu_zona_horaria, pattern="^set_zona_horaria$"),
         ],
         MODO_SEGURO_MENU: [
-            CallbackQueryHandler(recibir_nivel_callback, pattern="^nivel_seguro:\d$")
+            CallbackQueryHandler(recibir_nivel_callback, pattern=r"^nivel_seguro:\d$")
         ],
         ZONA_HORARIA_MENU: [
             CallbackQueryHandler(tz_metodo_automatico, pattern="^tz_auto$"),
@@ -247,14 +274,14 @@ ajustes_handler = ConversationHandler(
         ],
         ZONA_HORARIA_PIDE_UBICACION: [
             MessageHandler(filters.LOCATION, recibir_ubicacion),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, error_pide_ubicacion)
+            MessageHandler(filters.TEXT & ~filters.COMMAND, error_pide_ubicacion) 
         ],
-        ZONA_HORARIA_PIDE_CIUDAD: [ 
+        ZONA_HORARIA_PIDE_CIUDAD: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ciudad),
             MessageHandler(filters.LOCATION, error_pide_ciudad)
         ],
-        ZONA_HORARIA_CONFIRMAR_CIUDAD: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad)
-        ]},
+        ZONA_HORARIA_CONFIRMAR_CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad)],
+        CONFIRMAR_ACTUALIZACION_TZ: [CallbackQueryHandler(procesar_actualizacion_tz, pattern=r"^tz_update_")]
+    },
     fallbacks=[CommandHandler("cancelar", manejar_cancelacion)]
 )
