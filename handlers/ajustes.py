@@ -169,9 +169,23 @@ async def recibir_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def recibir_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Maneja EXCLUSIVAMENTE la recepción de un texto (ciudad)."""
     ciudad = update.message.text
+
+    # Enviamos el mensaje de "Buscando..." inmediatamente.
+    mensaje_carga = await update.message.reply_text(
+        get_text("timezone_buscando", ciudad=ciudad), 
+        parse_mode="Markdown"
+    )
+
     try:
         geolocator = Nominatim(user_agent="la_recordadora_bot")
-        location = geolocator.geocode(ciudad, language='es')
+        location = geolocator.geocode(ciudad, language='es', timeout=10) # como geopy puede fallar, damos margen de 10s
+        
+        # Una vez que geopy responde (rápido o lento), borramos el mensaje de "Buscando...".
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=mensaje_carga.message_id
+        )
+
         if location:
             tf = TimezoneFinder()
             user_timezone_encontrada = tf.timezone_at(lng=location.longitude, lat=location.latitude)
@@ -185,7 +199,14 @@ async def recibir_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             return ZONA_HORARIA_PIDE_CIUDAD
     except Exception as e:
         print(f"Error con geopy: {e}")
-        await update.message.reply_text(get_text("timezone_reintentar"))
+
+        # --- BORRAMOS EL MENSAJE DE CARGA (también en caso de error) ---
+        await context.bot.delete_message(
+            chat_id=update.effective_chat.id,
+            message_id=mensaje_carga.message_id
+        )
+        
+        await update.message.reply_text(get_text("error_geopy"))
         return ZONA_HORARIA_PIDE_CIUDAD
 
 async def error_pide_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

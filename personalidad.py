@@ -140,6 +140,10 @@ TEXTOS = {
     "timezone_reintentar": [
         "De acuerdo. Venga, inténtalo de nuevo. Escríbeme otra ciudad."
     ],
+    "timezone_buscando": [
+        "👵 Buscando '{ciudad}' en mi bola de cristal... Dame un segundo, que ya no tengo la vista que tenía.",
+        "👵 A ver dónde para esa ciudad de '{ciudad}'... Un momento, estoy consultando mis mapas mágicos.",
+    ],
 
     # --- Avisos ---
     "aviso_programado": [
@@ -204,6 +208,10 @@ TEXTOS = {
     ],
     "error_esperaba_ciudad": [
         "👵 ¡Por las barbas de Merlín! Te he pedido que me escribas el nombre de una ciudad. ¿Qué es eso de enviarme un mapa? ¡Venga, escribe!"
+    ],
+        "error_geopy": [
+        "👵 ¡Por las barbas de Merlín! Mis mapas mágicos no responden. Parece que hay interferencia en la red. Inténtalo de nuevo en un momento.",
+        "👵 ¡Ay, criatura! No consigo conectar con mis fuentes. La magia de la localización está fallando. Prueba a escribir la ciudad otra vez en unos minutos."
     ],
 
     # --- Flujo de Reset ---
