@@ -3,7 +3,7 @@ from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
 from config import TOKEN
 from db import crear_tablas
-from handlers import lista, recordar, cambiar_estado, borrar, ajustes, help_reset, start_onboarding
+from handlers import lista, recordar, cambiar_estado, borrar, ajustes, help_reset, start_onboarding, editar
 import avisos
 
 # --- Parte 1: El Servidor Web para Render (sin cambios) ---
@@ -42,6 +42,7 @@ def run_telegram_bot():
     app.add_handler(recordar.recordar_handler)
     app.add_handler(cambiar_estado.cambiar_estado_handler)
     app.add_handler(borrar.borrar_handler)
+    app.add_handler(editar.editar_handler)
 
     # 4. Comandos de Ajustes
     app.add_handler(ajustes.ajustes_handler)

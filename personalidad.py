@@ -60,6 +60,7 @@ TEXTOS = {
         "⏰ /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
         "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
         "🔄 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
+        "✏️ /editar – Para modificar un recordatorio que ya has creado (o su aviso).\n"
         "\n⚙️ /ajustes – Para ajustar tus manías con las confirmaciones de borrado o cambio de estado.\n"
         "\n❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
@@ -92,6 +93,26 @@ TEXTOS = {
     "recordatorio_pasado_lista": [
         "👵🗂️ ¡Esto ya se te ha pasado! Más te vale que lo hayas hecho aunque no te lo haya recordado a tiempo.",
         "👵🗂️ Se te pasó el arroz con esto. A ver si prestamos más atención al calendario."
+    ],
+
+    # --- Flujo de Editar ---
+    "editar_pide_id": [
+        "✏️ De acuerdo, vamos a hacer algunos cambios. ¿Cuál de tus desastres pendientes quieres modificar? Escríbeme su número de ID."
+    ],
+    "editar_elige_opcion": [
+        "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{texto}_ ({fecha}).\n\n¿Qué quieres cambiarle, criatura?"
+    ],
+    "editar_pide_recordatorio_nuevo": [
+        "✍️ Entendido. El recordatorio actual es:\n`{texto_actual}` ({fecha_actual})\n\nAhora, escríbelo de nuevo con los cambios, usando el formato `fecha * texto`."
+    ],
+    "editar_pide_aviso_nuevo": [
+        "⏳ De acuerdo. Tu aviso actual está programado para *{aviso_actual}* antes. \n\n¿Cuánto tiempo antes quieres que te avise ahora? (ej: `30m`, `2h`, `0` para ninguno)."
+    ],
+    "editar_confirmacion_recordatorio": [
+        "👍 ¡Hecho! He actualizado el recordatorio `#{user_id}`. Ahora es: _{texto}_ ({fecha})."
+    ],
+    "editar_confirmacion_aviso": [
+        "👍 ¡Listo! He cambiado el aviso para el recordatorio `#{user_id}` a *{aviso_nuevo}* antes."
     ],
 
     # --- Ajustes ---
