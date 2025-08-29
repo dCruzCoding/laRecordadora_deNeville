@@ -11,6 +11,10 @@ from telegram.ext import (
 )
 
 def normalizar_hora(texto):
+    """
+    Añade ':00' a las horas en punto para ayudar a dateparser.
+    Ej: "a las 11" -> "a las 11:00"
+    """
     patron = r'(a las|a la) (\d{1,2})(?![:\d])'
     return re.sub(patron, r'\1 \2:00', texto)
 
@@ -148,7 +152,7 @@ def formatear_lista_para_mensaje(chat_id: int, recordatorios: list, mostrar_info
     return "\n".join(lineas)
 
 
-async def manejar_cancelacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Función genérica para el fallback de /cancelar.
     Limpia datos, teclado y envía un mensaje de confirmación.
@@ -163,3 +167,11 @@ async def manejar_cancelacion(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     
     return ConversationHandler.END
+
+async def comando_inesperado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Se activa si se recibe un comando inesperado.
+    Le recuerda al usuario que debe usar /cancelar.
+    NO termina la conversación.
+    """
+    await update.message.reply_text(get_text("error_interrupcion"))

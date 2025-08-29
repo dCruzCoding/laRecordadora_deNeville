@@ -19,7 +19,7 @@ from db import get_config, set_config, get_connection
 from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
-from utils import manejar_cancelacion
+from utils import cancelar_conversacion, comando_inesperado
 
 # Estados de la nueva conversación unificada
 MENU_PRINCIPAL, \
@@ -233,7 +233,7 @@ async def confirmar_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         await update.message.reply_text("👵 ¡Criatura! Solo entiendo `SI` o `NO`. Venga, otra vez.")
         return ZONA_HORARIA_CONFIRMAR_CIUDAD
     # Si algo falla (ej. se pierde el user_data), cancelamos
-    return await manejar_cancelacion(update, context)
+    return await cancelar_conversacion(update, context)
 
 async def _guardar_y_preguntar_actualizacion_tz(update: Update, context: ContextTypes.DEFAULT_TYPE, nueva_tz: str):
     """Función ayudante: Guarda la nueva TZ y pregunta si se actualizan los recordatorios antiguos."""
@@ -304,5 +304,8 @@ ajustes_handler = ConversationHandler(
         ZONA_HORARIA_CONFIRMAR_CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad)],
         CONFIRMAR_ACTUALIZACION_TZ: [CallbackQueryHandler(procesar_actualizacion_tz, pattern=r"^tz_update_")]
     },
-    fallbacks=[CommandHandler("cancelar", manejar_cancelacion)]
+    fallbacks=[
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )

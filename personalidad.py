@@ -61,7 +61,7 @@ TEXTOS = {
         "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
         "🔄 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
         "✏️ /editar – Para modificar un recordatorio que ya has creado (o su aviso).\n"
-        "\n⚙️ /ajustes – Para ajustar tus manías con las confirmaciones de borrado o cambio de estado.\n"
+        "\n⚙️ /ajustes – Para añadir o quitar confirmaciones de borrado o cambio de estado, y cambiar la zona horaria.\n"
         "\n❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
     "ayuda_admin": [
@@ -75,8 +75,8 @@ TEXTOS = {
 
     # --- Flujo de Recordar ---
     "recordar_pide_fecha": [
-        "👵📅 Venga, dime qué y para cuándo. Y no tardes. \n\nFormato: `fecha * texto`.",
-        "👵📅 A ver, cariño, dime qué y para cuándo… aunque visto lo visto, seguro que lo olvidas igual que Neville. \n\nFormato: `fecha * texto`."
+        "👵📅 Venga, dime qué y para cuándo. Y no tardes. \n\nFormato: `fecha` `*` `texto`. En la fecha es obligatorio que me digas el día, la hora ya es opcional.\n\nEj: Mañana a las 14`*`Clases de Herbología",
+        "👵📅 A ver, cariño, dime qué y para cuándo… aunque visto lo visto, seguro que lo olvidas igual que Neville. \n\nFormato: `fecha` `*` `texto` (fecha: dia obligatorio hora opcional).\n\nEj: 20 Julio`*`Entrega proyecto Encantamientos"
     ],
     "recordar_pide_aviso": [
         "⏳ ¿Y cuánto antes quieres que te dé el rapapolvo? ¡Decídete! \n\n*(ej: 2h, 1d, 30m, 0 para ninguno)*.",
@@ -103,7 +103,7 @@ TEXTOS = {
         "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{texto}_ ({fecha}).\n\n¿Qué quieres cambiarle, criatura?"
     ],
     "editar_pide_recordatorio_nuevo": [
-        "✍️ Entendido. El recordatorio actual es:\n`{texto_actual}` ({fecha_actual})\n\nAhora, escríbelo de nuevo con los cambios, usando el formato `fecha * texto`."
+        "✍️ Entendido. El recordatorio actual es:\n`{texto_actual}` ({fecha_actual})\n\nAhora, escríbelo de nuevo con los cambios, usando el formato `fecha` `*` `texto`."
     ],
     "editar_pide_aviso_nuevo": [
         "⏳ De acuerdo. Tu aviso actual está programado para *{aviso_actual}* antes. \n\n¿Cuánto tiempo antes quieres que te avise ahora? (ej: `30m`, `2h`, `0` para ninguno)."
@@ -204,10 +204,10 @@ TEXTOS = {
 
     # --- Errores ---
     "error_formato": [
-        "❗ ¡Así no, criatura! El formato es `fecha * texto`. ¡Concéntrate!",
-        "❗ ¿Pero qué escribes? Tiene que ser `fecha * texto`. A veces pienso que te criaron los gnomos de jardín.",
-        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció y... \n\n Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
-        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
+        "❗ ¡Así no, criatura! El formato es `fecha` `*` `texto`. ¡Concéntrate!",
+        "❗ ¿Pero qué escribes? Tiene que ser `fecha` `*` `texto`. A veces pienso que te criaron los gnomos de jardín.",
+        "❗ Te has equivocado con el formato del recordatorio: `fecha` `*` `texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció y... \n\n Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
+        "❗ Te has equivocado con el formato del recordatorio: `fecha` `*` `texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
     ],
     "error_no_id": [
         "⚠️ ¡Desastre! No he encontrado ningún recordatorio tuyo con esos números.",
@@ -224,15 +224,19 @@ TEXTOS = {
         "⚠️ ¡Ese número no vale, criatura! Elige uno del 0 al 3.",
         "⚠️ ¿Qué parte de 'un número del 0 al 3' no has entendido? ¡Venga, otra vez!"
     ],
-        "error_esperaba_ubicacion": [
+    "error_esperaba_ubicacion": [
         "👵 ¡Criatura, a ver si me escuchas! Te he pedido que pulses el botón para compartir tu ubicación, no que me escribas la biblia en verso. ¡Inténtalo de nuevo!"
     ],
     "error_esperaba_ciudad": [
         "👵 ¡Por las barbas de Merlín! Te he pedido que me escribas el nombre de una ciudad. ¿Qué es eso de enviarme un mapa? ¡Venga, escribe!"
     ],
-        "error_geopy": [
+    "error_geopy": [
         "👵 ¡Por las barbas de Merlín! Mis mapas mágicos no responden. Parece que hay interferencia en la red. Inténtalo de nuevo en un momento.",
         "👵 ¡Ay, criatura! No consigo conectar con mis fuentes. La magia de la localización está fallando. Prueba a escribir la ciudad otra vez en unos minutos."
+    ],
+    "error_interrupcion": [
+        "👵 ¡Quieto ahí, criatura! Estamos en mitad de algo. Si te gusta dejar las cosas a medias, primero escribe /cancelar y luego ya me mareas con otra cosa.",
+        "👵 ¿Ya te has distraído? ¡Termina lo que has empezado! O si de verdad quieres cambiar de tema, usa /cancelar primero."
     ],
 
     # --- Flujo de Reset ---

@@ -8,7 +8,7 @@ from telegram.ext import (
 )
 from datetime import datetime
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, manejar_cancelacion
+from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -125,7 +125,7 @@ async def confirmar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_cambio(update, context)
 
-    return await manejar_cancelacion(update, context)
+    return await cancelar_conversacion(update, context)
 
 async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Lógica final de cambio de estado con la nueva validación de fecha."""
@@ -149,43 +149,36 @@ async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if row:
                     recordatorio_id_global, estado_actual, texto, fecha_iso, aviso_previo = row
                     
+
                     nuevo_estado = estado_actual
-                    if estado_actual in (1, 2): # Si estaba Hecho o Pasado
-                        nuevo_estado = 0 # Pasa a Pendiente
-                    elif estado_actual == 0: # Si estaba Pendiente
-                        nuevo_estado = 1 # Pasa a Hecho
+                    if estado_actual in (1, 2): nuevo_estado = 0
+                    elif estado_actual == 0: nuevo_estado = 1
 
                     if nuevo_estado != estado_actual:
                         cursor.execute("UPDATE recordatorios SET estado = ? WHERE id = ?", (nuevo_estado, recordatorio_id_global))
                         cambiados_msg.append(f"#{user_id}")
 
-                        if nuevo_estado == 1: # Si pasa a Hecho
+                        # --- LÓGICA DE AVISOS REFINADA ---
+                        if nuevo_estado == 1:
+                            # 1. Si pasa a HECHO (desde Pendiente o Pasado)
+                            #    Simplemente cancelamos cualquier aviso. No se necesita mensaje.
                             cancelar_avisos(str(recordatorio_id_global))
                         
-                        elif nuevo_estado == 0: # Si se reactiva (pasa a Pendiente)
-                            cancelar_avisos(str(recordatorio_id_global)) # Siempre cancelamos el aviso antiguo
+                        elif nuevo_estado == 0: # Si se reactiva (pasa a PENDIENTE)
+                            cancelar_avisos(str(recordatorio_id_global))
                             
-                            # --- ¡NUEVA LÓGICA DE VALIDACIÓN DE FECHA! ---
                             if fecha_iso:
                                 fecha_dt = datetime.fromisoformat(fecha_iso)
-                                # Obtenemos la zona horaria del usuario para una comparación justa
                                 user_tz_str = get_config(chat_id, "user_timezone") or 'UTC'
                                 user_tz = pytz.timezone(user_tz_str)
                                 
-                                # Comparamos la fecha del recordatorio con la hora actual en la zona del usuario
                                 if fecha_dt > datetime.now(tz=user_tz):
-                                    # La fecha es en el futuro: ¡podemos reprogramar!
-                                    reprogramados_info.append({
-                                        "user_id": user_id,
-                                        "global_id": recordatorio_id_global,
-                                        "texto": texto,
-                                        "fecha": fecha_dt
-                                    })
+                                    # 2. La fecha es futura: procedemos a reprogramar.
+                                    reprogramados_info.append({ ... })
                                 else:
-                                    # La fecha ya ha pasado: no tiene sentido reprogramar
+                                    # 3. La fecha es pasada: ¡AQUÍ MOSTRAMOS LA ADVERTENCIA!
                                     pasados_sin_aviso_msg.append(f"`#{user_id}`")
-                            # Si no hay fecha_iso, no se hace nada, lo cual es correcto.
-                            # --------------------------------------------------
+                            # Si no hay fecha, no hacemos nada.
 
             except (ValueError, TypeError):
                 pass
@@ -212,17 +205,33 @@ async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if pasados_sin_aviso_msg:
         mensaje_pasados = (
             f"⚠️ Nota: El/los recordatorio(s) {', '.join(pasados_sin_aviso_msg)} que has reactivado "
-            f"tiene(n) una fecha que ya ha pasado. Se han marcado como pendientes, pero no se pueden programar nuevos avisos para ellos."
+            f"tiene(n) una fecha que ya ha *pasado*. Por tanto, no se pueden añadir nuevos avisos."
         )
-        await update.message.reply_text(mensaje_pasados)
+        await update.message.reply_text(mensaje_pasados, parse_mode="Markdown")
 
     # 3. Iniciar la conversación para reprogramar solo si hay recordatorios futuros
     if reprogramados_info:
+        # Guardamos la lista de recordatorios a reprogramar en el contexto para los siguientes pasos
         context.user_data["reprogramar_lista"] = reprogramados_info
+        
+        # Sacamos el primer recordatorio de la lista para preguntar por él
         primer_recordatorio = reprogramados_info[0]
-        # ... (código para preguntar por el nuevo aviso, sin cambios)
+        
+        # Construimos el mensaje usando la personalidad del bot
+        mensaje_reprogramar = (
+            f"🗓️ Has reactivado el recordatorio `#{primer_recordatorio['user_id']}` - _{primer_recordatorio['texto']}_.\n\n"
+            f"{get_text('recordar_pide_aviso')}"
+        )
+        
+        await update.message.reply_text(
+            mensaje_reprogramar,
+            parse_mode="Markdown"
+        )
+        
+        # Le decimos al ConversationHandler que pase al estado de esperar el nuevo aviso
         return REPROGRAMAR_AVISO
-
+    
+    # Si no hay nada que reprogramar, limpiamos y terminamos.
     context.user_data.clear()
     return ConversationHandler.END
 
@@ -279,6 +288,7 @@ cambiar_estado_handler = ConversationHandler(
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },
     fallbacks=[
-        CommandHandler("cancelar", manejar_cancelacion)
-    ]
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )

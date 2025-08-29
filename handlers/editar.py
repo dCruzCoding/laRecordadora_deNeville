@@ -1,12 +1,10 @@
-# handlers/editar.py
-
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 )
 from datetime import datetime
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_recordatorio, parsear_tiempo_a_minutos, manejar_cancelacion, convertir_utc_a_local
+from utils import formatear_lista_para_mensaje, parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -209,5 +207,8 @@ editar_handler = ConversationHandler(
         EDITAR_RECORDATORIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_nuevo_recordatorio)],
         EDITAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_nuevo_aviso)],
     },
-    fallbacks=[CommandHandler("cancelar", manejar_cancelacion)],
+    fallbacks=[
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )

@@ -6,7 +6,7 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from utils import parsear_recordatorio, parsear_tiempo_a_minutos, manejar_cancelacion, convertir_utc_a_local
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
 from db import get_connection, get_config
 from avisos import programar_avisos
 from personalidad import get_text
@@ -142,6 +142,7 @@ recordar_handler = ConversationHandler(
         AVISO_PREVIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_aviso_previo)]
     },
     fallbacks=[
-        CommandHandler("cancelar", manejar_cancelacion)
-    ]
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )

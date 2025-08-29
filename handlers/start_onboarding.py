@@ -18,7 +18,7 @@ from db import get_config, set_config
 from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
-from utils import manejar_cancelacion
+from utils import cancelar_conversacion, comando_inesperado
 
 # Estados para la nueva conversación de bienvenida
 ONBOARDING_ELIGE_MODO_SEGURO, \
@@ -275,7 +275,10 @@ start_handler = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad_onboarding)
         ]
     },
-    fallbacks=[CommandHandler("cancelar", manejar_cancelacion)],
+    fallbacks=[
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ]
 )
 
 

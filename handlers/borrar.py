@@ -1,5 +1,3 @@
-# handlers/borrar.py
-
 from telegram import Update
 from telegram.ext import (
     ContextTypes,
@@ -9,7 +7,7 @@ from telegram.ext import (
     filters
 )
 from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, manejar_cancelacion, formatear_fecha_para_mensaje
+from utils import formatear_lista_para_mensaje, cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado
 from avisos import cancelar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -123,7 +121,7 @@ async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.text.strip().upper() == "SI":
         return await ejecutar_borrado(update, context)
     
-    return await manejar_cancelacion(update, context)
+    return await cancelar_conversacion(update, context)
     
 
 async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -175,6 +173,7 @@ borrar_handler = ConversationHandler(
         CONFIRMAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_borrado)]
     },
     fallbacks=[
-        CommandHandler("cancelar", manejar_cancelacion)
-    ]
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )

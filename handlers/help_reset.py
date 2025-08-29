@@ -10,7 +10,7 @@ from db import resetear_base_de_datos
 from avisos import cancelar_todos_los_avisos
 from config import OWNER_ID  
 from personalidad import get_text
-from utils import manejar_cancelacion
+from utils import cancelar_conversacion, comando_inesperado
 
 
 async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -53,6 +53,7 @@ reset_handler = ConversationHandler(
         CONFIRMACION_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_reset)]
     },
     fallbacks=[
-        CommandHandler("cancelar", manejar_cancelacion)
-    ]
+        CommandHandler("cancelar", cancelar_conversacion),
+        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+    ],
 )
