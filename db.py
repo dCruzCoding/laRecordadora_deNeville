@@ -25,7 +25,7 @@ def crear_tablas():
                 chat_id INTEGER NOT NULL,
                 texto TEXT,
                 fecha_hora TEXT,
-                estado INTEGER,
+                estado INTEGER DEFAULT 0,
                 aviso_previo INTEGER,
                 timezone TEXT 
             )
@@ -58,32 +58,32 @@ def set_config(chat_id: int, key: str, value: str):
         cursor.execute("INSERT OR REPLACE INTO configuracion (chat_id, clave, valor) VALUES (?, ?, ?)", (chat_id, key, value))
         conn.commit()
 
-def actualizar_recordatorios_pasados():
-    """
-    Busca recordatorios pendientes cuya fecha ha pasado y los actualiza al estado 'pasado' (2).
-    Esta función es clave para la nueva lógica automática.
-    """
-    # Usamos la misma zona horaria que el scheduler para consistencia
-    now_utc = datetime.now(pytz.utc)
-    now_utc_iso = now_utc.isoformat()
+# def actualizar_recordatorios_pasados():
+#     """
+#     Busca recordatorios pendientes cuya fecha ha pasado y los actualiza al estado 'pasado' (2).
+#     Esta función es clave para la nueva lógica automática.
+#     """
+#     # Usamos la misma zona horaria que el scheduler para consistencia
+#     now_utc = datetime.now(pytz.utc)
+#     now_utc_iso = now_utc.isoformat()
 
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        # Cambiamos estado de 0 (pendiente) a 2 (pasado) si la fecha es anterior a ahora
-        cursor.execute(
-            """
-            UPDATE recordatorios 
-            SET estado = 2 
-            WHERE estado = 0 AND fecha_hora IS NOT NULL AND fecha_hora < ?
-            """,
-            (now_utc_iso,)
-        )
-        # Devolvemos el número de filas cambiadas, útil para depurar
-        changed_rows = cursor.rowcount
-        conn.commit()
+#     with get_connection() as conn:
+#         cursor = conn.cursor()
+#         # Cambiamos estado de 0 (pendiente) a 2 (pasado) si la fecha es anterior a ahora
+#         cursor.execute(
+#             """
+#             UPDATE recordatorios 
+#             SET estado = 2 
+#             WHERE estado = 0 AND fecha_hora IS NOT NULL AND fecha_hora < ?
+#             """,
+#             (now_utc_iso,)
+#         )
+#         # Devolvemos el número de filas cambiadas, útil para depurar
+#         changed_rows = cursor.rowcount
+#         conn.commit()
     
-    if changed_rows > 0:
-        print(f"ℹ️  {changed_rows} recordatorio(s) actualizado(s) a 'pasado'.")
+#     if changed_rows > 0:
+#         print(f"ℹ️  {changed_rows} recordatorio(s) actualizado(s) a 'pasado'.")
 
 
 def resetear_base_de_datos():

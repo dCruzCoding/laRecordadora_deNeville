@@ -14,10 +14,10 @@ TEXTOS = {
         "`/recordar mañana a las 15:00 * Comprar ingredientes para la poción multijugos`\n"
         "Después de apuntarlo, siempre te preguntaré si quieres que te dé un **aviso previo** (ej: `1h`, `30m`).\n\n"
         "📝👀 *VER TUS RECORDATORIOS:*\n"
-        "Con /lista podrás ver todos tus recordatorios. Verás que las tareas pueden tener tres estados:\n"
-        "  - `🕒 Pendiente`: Aún no ha llegado la fecha.\n"
-        "  - `🗂️ Pasado`: ¡Se te ha pasado la fecha! Ya no puedes ponerle avisos, pero puedes marcarla como hecha.\n"
-        "  - `✅ Hecho`: ¡Tarea completada! ¡Ya era hora!\n\n"
+        "Con /lista podrás ver todos tus recordatorios. Verás que cada tarea tiene un icono:\n"
+        "  - `⬜️`: Esto es algo que tienes **pendiente**.\n"
+        "  - `✅`: Esto es algo que ya has marcado como **hecho**. ¡Bien por ti! El texto aparecerá tachado.\n\n"
+        "Además, aquellos recordatorios que ya han pasado aparecerán en una sección aparte denominada `PASADOS`, a los cuales no podrás añadir avisos pero sí marcarlos como hechos o pendientes.\n"
 
         "⚠️ *IMPORTANTE! ⚠️\n\n🕰️🌍 LA ZONA HORARIA:*\n"
         "Para que te avise a la hora que quieres, es *crucial* que configures bien tu zona horaria. Así me aseguro de que un aviso para las 10 de la mañana te llegue a *tus* 10 de la mañana, y no a las mías.\n\n"
@@ -60,7 +60,7 @@ TEXTOS = {
         "⏰ /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
         "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
         "🔄 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
-        "✏️ /editar – Para modificar un recordatorio que ya has creado (o su aviso).\n"
+        "🪄 /editar – Para modificar un recordatorio que ya has creado (o su aviso).\n"
         "\n⚙️ /ajustes – Para añadir o quitar confirmaciones de borrado o cambio de estado, y cambiar la zona horaria.\n"
         "\n❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
@@ -96,9 +96,6 @@ TEXTOS = {
     ],
 
     # --- Flujo de Editar ---
-    "editar_pide_id": [
-        "✏️ De acuerdo, vamos a hacer algunos cambios. ¿Cuál de tus desastres pendientes quieres modificar? Escríbeme su número de ID."
-    ],
     "editar_elige_opcion": [
         "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{texto}_ ({fecha}).\n\n¿Qué quieres cambiarle, criatura?"
     ],

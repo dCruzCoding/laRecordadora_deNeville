@@ -3,8 +3,8 @@ from telegram.ext import (
     ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 )
 from datetime import datetime
-from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
+from db import get_connection, get_config
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -14,14 +14,13 @@ ELEGIR_ID, ELEGIR_OPCION, EDITAR_RECORDATORIO, EDITAR_AVISO = range(4)
 
 async def editar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Punto de entrada para /editar. Muestra la lista de recordatorios."""
-    actualizar_recordatorios_pasados()
     chat_id = update.effective_chat.id
     
     with get_connection() as conn:
         cursor = conn.cursor()
-        # Mostramos solo los recordatorios que se pueden editar (Pendientes y Pasados)
+
         cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? AND estado != 1 ORDER BY estado, user_id",
+            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
             (chat_id,)
         )
         recordatorios = cursor.fetchall()
@@ -30,19 +29,15 @@ async def editar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         await update.message.reply_text("📭 Criatura, no tienes recordatorios pendientes o pasados que puedas editar.")
         return ConversationHandler.END
 
-    pendientes = [r for r in recordatorios if r[5] == 0]
-    pasados = [r for r in recordatorios if r[5] == 2]
-    
-    secciones = []
-    if pendientes:
-        secciones.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(chat_id, pendientes)}")
-    if pasados:
-        secciones.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(chat_id, pasados)}")
+    mensaje_lista = construir_mensaje_lista_completa(
+        chat_id, 
+        recordatorios, 
+        titulo_general="🪄 Recordatorios para Editar 🪄\n"
+    )
 
-    mensaje_lista = "*✏️ Lista para Editar:*\n\n" + "\n\n".join(secciones)
-    mensaje_lista += "\n\n" + get_text("editar_pide_id")
-    
-    await update.message.reply_text(mensaje_lista, parse_mode="Markdown")
+    mensaje_final = mensaje_lista + "\n\n" + "\n✏️ Escribe el ID del recordatorio que quieras editar o /cancelar para salir:"
+
+    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
 
 async def recibir_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:

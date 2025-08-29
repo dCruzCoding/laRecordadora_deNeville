@@ -66,9 +66,14 @@ def parsear_recordatorio(texto_entrada, user_timezone='UTC'):
         fecha_utc = fecha_aware.astimezone(pytz.utc)
         
         texto = limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()
-        texto_capitalizado = texto.strip().capitalize()
-        
-        return texto_capitalizado, fecha_utc, None
+        if texto:
+            # Creamos el nuevo texto cogiendo el primer carácter, poniéndolo en mayúscula,
+            # y luego concatenando el RESTO de la cadena (desde el segundo carácter hasta el final).
+            texto_formateado = texto[0].upper() + texto[1:]
+        else:
+            texto_formateado = ""
+
+        return texto_formateado, fecha_utc, None
     else:
         return None, None, get_text("error_formato")
 
@@ -108,49 +113,63 @@ def parsear_tiempo_a_minutos(valor: str):
         return None
     return None
 
+def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
+    """Función privada ayudante. Formatea UNA SOLA línea."""
+    _, user_id, _, texto, fecha_iso, estado, _, timezone_recordatorio = recordatorio
+       
+    fecha_str = "Sin fecha"
 
-def formatear_lista_para_mensaje(chat_id: int, recordatorios: list, mostrar_info_aviso: bool = False) -> str:
+    if fecha_iso:
+        fecha_utc = datetime.fromisoformat(fecha_iso)
+        tz_para_mostrar = timezone_recordatorio or user_tz_global
+        fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
+        fecha_str = fecha_local.strftime("%d %b, %H:%M")
+
+    prefijo = "✅ " if estado == 1 else "⬜️ "
+    return f"{prefijo}`#{user_id}` - {texto} ({fecha_str})"
+
+
+def construir_mensaje_lista_completa(chat_id: int, recordatorios: list, titulo_general: str = None) -> str:
     """
-    Toma una lista de recordatorios y la convierte en un string formateado para un mensaje.
-    AHORA RECIBE 'user_id' en lugar de 'rid'.
+    Función universal. Toma una lista de recordatorios y devuelve el mensaje
+    completo, clasificado en Futuros y Pasados.
     """
-    # Si la lista está vacía, no hay nada que hacer.
     if not recordatorios:
-        return ""
+        return get_text("lista_vacia") # Usamos la personalidad para el mensaje de lista vacía
 
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
-    lineas = []
-    
-    for _, user_id, chat_id, texto, fecha_iso, estado, aviso_previo, timezone in recordatorios:
-        # Primero, manejamos el caso de que no haya fecha
-        if not fecha_iso:
-            lineas.append(f"`#{user_id}` - {texto} (Sin fecha)")
-            continue
+    now_aware = datetime.now(pytz.timezone(user_tz))
 
-        # --- CONVERSIÓN A LOCAL (Punto único de verdad para la fecha) ---
-        fecha_utc = datetime.fromisoformat(fecha_iso)
-        tz_para_mostrar = timezone or 'UTC'
-        fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
-        fecha_str = fecha_local.strftime("%d %b %Y, %H:%M")
-        
-        # Línea principal
-        entrada = f"`#{user_id}` - {texto} ({fecha_str})"
-        
-        if mostrar_info_aviso:
-            if aviso_previo and aviso_previo > 0:
-                # --- ¡CORRECCIÓN AQUÍ! ---
-                # Calculamos la hora del aviso a partir de la fecha LOCAL
-                fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
-                info_aviso_str = f"🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}"
+    futuros_y_sin_fecha = []
+    pasados = []
+
+    for r in recordatorios:
+        fecha_iso, timezone_r = r[4], r[7]
+        if fecha_iso:
+            fecha_utc = datetime.fromisoformat(fecha_iso)
+            tz_para_comparar = timezone_r or user_tz
+            fecha_local = convertir_utc_a_local(fecha_utc, tz_para_comparar)
+            if fecha_local < now_aware:
+                pasados.append(r)
             else:
-                info_aviso_str = "🔕 Sin aviso programado"
-            
-            entrada += f"\n  └─ {info_aviso_str}"
-            
-        lineas.append(entrada)
-        
-    return "\n".join(lineas)
+                futuros_y_sin_fecha.append(r)
+        else:
+            futuros_y_sin_fecha.append(r)
 
+    mensaje_partes = []
+    if titulo_general:
+        mensaje_partes.append(f"*{titulo_general}*")
+
+    if futuros_y_sin_fecha:
+        lineas_futuras = [_formatear_linea_individual(chat_id, r, user_tz) for r in futuros_y_sin_fecha]
+        mensaje_partes.append("\n".join(lineas_futuras))
+
+    if pasados:
+        mensaje_partes.append("\n--- *Pasados* ---\n")
+        lineas_pasadas = [_formatear_linea_individual(chat_id, r, user_tz) for r in pasados]
+        mensaje_partes.append("\n".join(lineas_pasadas))
+        
+    return "\n".join(mensaje_partes)
 
 async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """

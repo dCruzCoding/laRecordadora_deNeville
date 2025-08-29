@@ -7,8 +7,8 @@ from telegram.ext import (
     filters
 )
 from datetime import datetime
-from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado
+from db import get_connection, get_config
+from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos, programar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -21,7 +21,6 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
     """
     Punto de entrada para /cambiar. Filtra y muestra solo los recordatorios del usuario.
     """
-    actualizar_recordatorios_pasados()
     chat_id = update.effective_chat.id  # <-- Obtenemos el ID del usuario
 
     if context.args:
@@ -42,23 +41,11 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("📭 No tienes recordatorios para cambiar.")
         return ConversationHandler.END
 
-    pendientes = [r for r in recordatorios if r[5] == 0]
-    hechos = [r for r in recordatorios if r[5] == 1]
-    pasados = [r for r in recordatorios if r[5] == 2]
-
-    secciones_mensaje = []
-    if pendientes:
-        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(chat_id, pendientes)}")
-    if pasados:
-        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(chat_id, pasados)}")
-    if hechos:
-        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(chat_id, hechos)}")
-
-    mensaje_final = "*🔄 Lista para Cambiar Estado:*\n\n" + "\n\n".join(secciones_mensaje)
-    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras cambiar (separados por espacio y sin #) o /cancelar para salir:"
-    
+    mensaje_lista = construir_mensaje_lista_completa(chat_id, recordatorios, titulo_general="🔄 Recordatorios para Cambiar estado 🔄\n")
+    mensaje_final = mensaje_lista + "\n\n\n✏️ Escribe el/los ID que quieras cambiar (separados por espacio y sin #) o /cancelar para salir:"
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
+
 
 async def recibir_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recibe los IDs después de que el usuario vea la lista."""

@@ -1,13 +1,10 @@
 from telegram import Update
 from telegram.ext import ContextTypes
-from db import get_connection, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje
-from datetime import datetime, timedelta
-from config import ESTADOS  # Importamos los estados desde config
+from db import get_connection
+from utils import construir_mensaje_lista_completa
 from personalidad import get_text
 
 async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    actualizar_recordatorios_pasados()
     chat_id = update.effective_chat.id
 
     filtro = None
@@ -36,30 +33,7 @@ async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(get_text("lista_vacia"))
         return
 
-    pendientes = [r for r in recordatorios if r[5] == 0]
-    hechos = [r for r in recordatorios if r[5] == 1]
-    pasados = [r for r in recordatorios if r[5] == 2]
-
-    secciones_mensaje = []
-    if pendientes:
-        titulo = f"*{ESTADOS[0]}:*"
-        # Usamos la nueva función centralizada
-        items = formatear_lista_para_mensaje(chat_id, pendientes, mostrar_info_aviso=True)
-        secciones_mensaje.append(f"{titulo}\n{items}")
-        
-    if pasados:
-        titulo = f"*{ESTADOS[2]}:*"
-        items = formatear_lista_para_mensaje(chat_id, pasados)
-        secciones_mensaje.append(f"{titulo}\n{items}")
-
-    if hechos:
-        titulo = f"*{ESTADOS[1]}:*"
-        items = formatear_lista_para_mensaje(chat_id, hechos)
-        secciones_mensaje.append(f"{titulo}\n{items}")
-        
-    mensaje_final = "\n\n".join(secciones_mensaje)
-
-    if pendientes:
-        mensaje_final += "\n\n---\n_Venga, a trabajar. ¡Que no se diga que los Longbottom son unos vagos!_"
-
+    # Llama a la función universal de clasificación
+    mensaje_final = construir_mensaje_lista_completa(chat_id, recordatorios, "📜 **Lista de Recordatorios** 📜\n")
+    
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")

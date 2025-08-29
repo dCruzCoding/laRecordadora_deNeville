@@ -6,8 +6,8 @@ from telegram.ext import (
     MessageHandler,
     filters
 )
-from db import get_connection, get_config, actualizar_recordatorios_pasados
-from utils import formatear_lista_para_mensaje, cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado
+from db import get_connection, get_config
+from utils import cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos
 from config import ESTADOS
 from personalidad import get_text
@@ -16,7 +16,6 @@ ELEGIR_ID, CONFIRMAR = range(2)
 
 async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Punto de entrada para /borrar."""
-    actualizar_recordatorios_pasados()
 
     if context.args:
         # Modo rápido: el usuario ya proveyó los IDs.
@@ -37,21 +36,9 @@ async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("📭 No tienes recordatorios para borrar.")
         return ConversationHandler.END
 
-    pendientes = [r for r in recordatorios if r[5] == 0]
-    hechos = [r for r in recordatorios if r[5] == 1]
-    pasados = [r for r in recordatorios if r[5] == 2]
-
-    secciones_mensaje = []
-    if pendientes:
-        secciones_mensaje.append(f"*{ESTADOS[0]}:*\n{formatear_lista_para_mensaje(chat_id, pendientes)}")
-    if pasados:
-        secciones_mensaje.append(f"*{ESTADOS[2]}:*\n{formatear_lista_para_mensaje(chat_id, pasados)}")
-    if hechos:
-        secciones_mensaje.append(f"*{ESTADOS[1]}:*\n{formatear_lista_para_mensaje(chat_id, hechos)}")
-
-    mensaje_final = "*BORRAR 🗑 :*\n\n" + "\n\n".join(secciones_mensaje)
-    mensaje_final += "\n\n✏️ Escribe el/los ID que quieras borrar (separados por espacio y sin #) o /cancelar si quieres salir:"
+    mensaje_lista = construir_mensaje_lista_completa(chat_id, recordatorios, titulo_general="🗑️ Recordatorios para Borrar 🗑️ \n")
     
+    mensaje_final = mensaje_lista + "\n\n" + "\n✏️ Escribe el/los ID que quieras borrar..."
     await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
 
