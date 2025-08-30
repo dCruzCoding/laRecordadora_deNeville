@@ -22,15 +22,3 @@ except locale.Error:
 TOKEN = os.getenv("TELEGRAM_TOKEN", "TU_TOKEN_AQUI_PARA_PRUEBAS_LOCALES")
   
 OWNER_ID = 000000000    # ID de usuario de Telegram
-
-# Para que el código sea más limpio, definimos los estados aquí también
-ESTADOS = {
-    0: "🕒 Pendiente",
-    1: "✅ Hecho",
-    2: "🗂️ Pasado"
-}
-
-COMANDOS_VALIDOS = [
-    "/start", "/info", "/ayuda", "/lista", "/recordar",
-    "/borrar", "/cambiar", "/ajustes", "/reset", "/cancelar"
-]

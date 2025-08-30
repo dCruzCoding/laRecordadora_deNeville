@@ -1,6 +1,4 @@
 import sqlite3
-from datetime import datetime
-import pytz
 from config import OWNER_ID # Necesitaremos el OWNER_ID para la migración
 
 DB_PATH = "la_recordadora.db"
@@ -57,34 +55,6 @@ def set_config(chat_id: int, key: str, value: str):
         cursor = conn.cursor()
         cursor.execute("INSERT OR REPLACE INTO configuracion (chat_id, clave, valor) VALUES (?, ?, ?)", (chat_id, key, value))
         conn.commit()
-
-# def actualizar_recordatorios_pasados():
-#     """
-#     Busca recordatorios pendientes cuya fecha ha pasado y los actualiza al estado 'pasado' (2).
-#     Esta función es clave para la nueva lógica automática.
-#     """
-#     # Usamos la misma zona horaria que el scheduler para consistencia
-#     now_utc = datetime.now(pytz.utc)
-#     now_utc_iso = now_utc.isoformat()
-
-#     with get_connection() as conn:
-#         cursor = conn.cursor()
-#         # Cambiamos estado de 0 (pendiente) a 2 (pasado) si la fecha es anterior a ahora
-#         cursor.execute(
-#             """
-#             UPDATE recordatorios 
-#             SET estado = 2 
-#             WHERE estado = 0 AND fecha_hora IS NOT NULL AND fecha_hora < ?
-#             """,
-#             (now_utc_iso,)
-#         )
-#         # Devolvemos el número de filas cambiadas, útil para depurar
-#         changed_rows = cursor.rowcount
-#         conn.commit()
-    
-#     if changed_rows > 0:
-#         print(f"ℹ️  {changed_rows} recordatorio(s) actualizado(s) a 'pasado'.")
-
 
 def resetear_base_de_datos():
     """Elimina TODOS los recordatorios de la base de datos."""

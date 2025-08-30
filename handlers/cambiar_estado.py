@@ -10,7 +10,6 @@ from datetime import datetime
 from db import get_connection, get_config
 from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos, programar_avisos
-from config import ESTADOS
 from personalidad import get_text
 import pytz
 
@@ -90,22 +89,34 @@ async def _procesar_ids_para_cambiar(update: Update, context: ContextTypes.DEFAU
     
     modo_seguro = int(get_config(chat_id, "modo_seguro") or 0)
     if modo_seguro in (2, 3):
-        # --- MENSAJE DE CONFIRMACIÓN MEJORADO ---
+        # --- ¡BLOQUE DE CONFIRMACIÓN CON PREDICCIÓN (CORREGIDO)! ---
+        
+        # Creamos un pequeño diccionario local para los emojis
+        emojis_estado = {0: "⬜️", 1: "✅"}
+        
         mensaje_lista = []
+        # La tupla es (user_id, texto, fecha_iso, estado_actual)
         for user_id, texto, fecha_iso, estado_actual in recordatorios_a_cambiar_info:
-            estado_viejo_str = ESTADOS.get(estado_actual, "")
-            estado_nuevo_str = ESTADOS.get(0 if estado_actual in (1, 2) else 1, "")
-            mensaje_lista.append(f"  - `#{user_id}`: _{texto}_ (Pasará de {estado_viejo_str} a {estado_nuevo_str})")
+            
+            # Obtenemos el emoji del estado actual y del futuro
+            emoji_viejo = emojis_estado.get(estado_actual, "❓")
+            # La lógica del nuevo estado es un simple interruptor
+            estado_nuevo = 1 - estado_actual
+            emoji_nuevo = emojis_estado.get(estado_nuevo, "❓")
+
+            # Construimos la línea con la predicción del cambio
+            mensaje_lista.append(f"  - `#{user_id}`: _{texto}_\n    *Cambiará de {emoji_viejo} -->> {emoji_nuevo}*")
             
         mensaje_confirmacion = (
             f"👵 ¿Estás seguro de que quieres cambiar el estado de lo siguiente?:\n\n"
-            f"{'\n'.join(mensaje_lista)}\n\n"
+            f"{'\n\n'.join(mensaje_lista)}\n\n"
             "Responde `SI` para confirmar."
         )
         await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
         return CONFIRMAR_CAMBIO
     
     return await ejecutar_cambio(update, context)
+    
 
 async def confirmar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Se activa después de que el usuario escribe 'SI'."""

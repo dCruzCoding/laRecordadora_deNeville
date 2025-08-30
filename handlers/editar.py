@@ -6,7 +6,6 @@ from datetime import datetime
 from db import get_connection, get_config
 from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos, programar_avisos
-from config import ESTADOS
 from personalidad import get_text
 
 # Estados para la conversación de edición

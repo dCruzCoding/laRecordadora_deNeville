@@ -1,6 +1,6 @@
 import re
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 from dateparser.search import search_dates
 from personalidad import get_text
 from db import get_config

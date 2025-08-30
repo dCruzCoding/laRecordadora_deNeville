@@ -9,7 +9,6 @@ from telegram.ext import (
 from db import get_connection, get_config
 from utils import cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado, construir_mensaje_lista_completa
 from avisos import cancelar_avisos
-from config import ESTADOS
 from personalidad import get_text
 
 ELEGIR_ID, CONFIRMAR = range(2)
