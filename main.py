@@ -3,7 +3,7 @@ from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
 from config import TOKEN
 from db import crear_tablas
-from handlers import lista, recordar, cambiar_estado, borrar, ajustes, help_reset, start_onboarding, editar
+from handlers import lista, recordar, cambiar_estado, borrar, ajustes, help_reset, start_onboarding, editar, posponer
 import avisos
 
 # --- Parte 1: El Servidor Web para Render (sin cambios) ---
@@ -38,8 +38,13 @@ def run_telegram_bot():
     app.add_handler(CommandHandler("ayuda", help_reset.ayuda))
 
     # 3. Comandos de Gestión de Recordatorios
-    app.add_handler(CommandHandler("lista", lista.lista))
+    app.add_handler(lista.lista_handler)
+    app.add_handler(lista.lista_shared_handler) # paginacion + pivot
+    app.add_handler(lista.limpiar_pasados_handler)
+
     app.add_handler(recordar.recordar_handler)
+    app.add_handler(posponer.posponer_handler)
+
     app.add_handler(cambiar_estado.cambiar_estado_handler)
     app.add_handler(borrar.borrar_handler)
     app.add_handler(editar.editar_handler)

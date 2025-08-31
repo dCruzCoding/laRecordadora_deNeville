@@ -8,8 +8,9 @@ from telegram.ext import (
 )
 from datetime import datetime
 from db import get_connection, get_config
-from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, construir_mensaje_lista_completa
+from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, enviar_lista_interactiva
 from avisos import cancelar_avisos, programar_avisos
+from handlers.lista import TITULOS
 from personalidad import get_text
 import pytz
 
@@ -17,32 +18,14 @@ import pytz
 ELEGIR_ID, CONFIRMAR_CAMBIO, REPROGRAMAR_AVISO = range(3)
 
 async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Punto de entrada para /cambiar. Filtra y muestra solo los recordatorios del usuario.
-    """
-    chat_id = update.effective_chat.id  # <-- Obtenemos el ID del usuario
-
+    """Punto de entrada para /cambiar."""
     if context.args:
-        # Modo rápido: el usuario ya ha proporcionado los IDs
         return await _procesar_ids_para_cambiar(update, context, context.args)
         
-    # Modo interactivo: mostramos la lista.
-    chat_id = update.effective_chat.id
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
-            (chat_id,)
-        )
-        recordatorios = cursor.fetchall()
-
-    if not recordatorios:
-        await update.message.reply_text("📭 No tienes recordatorios para cambiar.")
-        return ConversationHandler.END
-
-    mensaje_lista = construir_mensaje_lista_completa(chat_id, recordatorios, titulo_general="🔄 Recordatorios para Cambiar estado 🔄\n")
-    mensaje_final = mensaje_lista + "\n\n\n✏️ Escribe el/los ID que quieras cambiar (separados por espacio y sin #) o /cancelar para salir:"
-    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
+    # --- ¡LÓGICA DE LISTA REEMPLAZADA! ---
+    await enviar_lista_interactiva(
+        update, context, context_key="cambiar", titulos=TITULOS["cambiar"]
+    )
     return ELEGIR_ID
 
 

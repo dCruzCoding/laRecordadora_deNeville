@@ -19,7 +19,7 @@ TEXTOS = {
         "  - `✅`: Esto es algo que ya has marcado como **hecho**. ¡Bien por ti! El texto aparecerá tachado.\n\n"
         "Además, aquellos recordatorios que ya han pasado aparecerán en una sección aparte denominada `PASADOS`, a los cuales no podrás añadir avisos pero sí marcarlos como hechos o pendientes.\n"
 
-        "⚠️ *IMPORTANTE! ⚠️\n\n🕰️🌍 LA ZONA HORARIA:*\n"
+        "\n\n⚠️ *IMPORTANTE! ⚠️\n\n🕰️🌍 LA ZONA HORARIA:*\n"
         "Para que te avise a la hora que quieres, es *crucial* que configures bien tu zona horaria. Así me aseguro de que un aviso para las 10 de la mañana te llegue a *tus* 10 de la mañana, y no a las mías.\n\n"
         "Por ello, ten en cuenta que *si viajas a otra zona horaria, deberás actualizar tu configuración y tus recordatorios*.\n\n"
         "-------------------\n"

@@ -1,10 +1,11 @@
 import re
 import pytz
-from datetime import datetime
+from math import ceil
+from datetime import datetime, timedelta
 from dateparser.search import search_dates
 from personalidad import get_text
-from db import get_config
-from telegram import Update, ReplyKeyboardRemove
+from db import get_config, get_recordatorios
+from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
     ContextTypes,
     ConversationHandler
@@ -113,23 +114,44 @@ def parsear_tiempo_a_minutos(valor: str):
         return None
     return None
 
+
+# CONSTRUCCIÓN DE LISTADOS
+
 def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
     """Función privada ayudante. Formatea UNA SOLA línea."""
-    _, user_id, _, texto, fecha_iso, estado, _, timezone_recordatorio = recordatorio
+    _, user_id, _, texto, fecha_iso, estado, aviso_previo, timezone_recordatorio = recordatorio
        
     fecha_str = "Sin fecha"
+    lineas = []
+    fecha_local = None
 
+    # Construimos la línea principal (la que tiene el ID y el texto)
+    linea_principal = ""
     if fecha_iso:
         fecha_utc = datetime.fromisoformat(fecha_iso)
         tz_para_mostrar = timezone_recordatorio or user_tz_global
         fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
 
+    # Decidimos el prefijo
     prefijo = "✅ " if estado == 1 else "⬜️ "
-    return f"{prefijo}`#{user_id}` - {texto} ({fecha_str})"
+        
+    linea_principal = f"{prefijo} `#{user_id}` - {texto} ({fecha_str})"
+    lineas.append(linea_principal)
+
+    # Solo mostramos el aviso si se cumplen TODAS estas condiciones:
+    ''' 1. El recordatorio está pendiente (estado 0) | 2. Tiene una fecha. | 3. La fecha es FUTURA. | 4. Tiene  aviso previo programado (> 0).'''
+    now_aware = datetime.now(pytz.timezone(user_tz_global))
+
+    if estado == 0 and fecha_local and fecha_local > now_aware and aviso_previo and aviso_previo > 0:
+        fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
+        info_aviso_str = f"🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}"
+        lineas.append(f"  └─ {info_aviso_str}")
+        
+    return "\n".join(lineas)
 
 
-def construir_mensaje_lista_completa(chat_id: int, recordatorios: list, titulo_general: str = None) -> str:
+def construir_mensaje_lista_completa(chat_id: int, recordatorios: list) -> str:
     """
     Función universal. Toma una lista de recordatorios y devuelve el mensaje
     completo, clasificado en Futuros y Pasados.
@@ -138,38 +160,85 @@ def construir_mensaje_lista_completa(chat_id: int, recordatorios: list, titulo_g
         return get_text("lista_vacia") # Usamos la personalidad para el mensaje de lista vacía
 
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
-    now_aware = datetime.now(pytz.timezone(user_tz))
-
-    futuros_y_sin_fecha = []
-    pasados = []
-
-    for r in recordatorios:
-        fecha_iso, timezone_r = r[4], r[7]
-        if fecha_iso:
-            fecha_utc = datetime.fromisoformat(fecha_iso)
-            tz_para_comparar = timezone_r or user_tz
-            fecha_local = convertir_utc_a_local(fecha_utc, tz_para_comparar)
-            if fecha_local < now_aware:
-                pasados.append(r)
-            else:
-                futuros_y_sin_fecha.append(r)
-        else:
-            futuros_y_sin_fecha.append(r)
-
-    mensaje_partes = []
-    if titulo_general:
-        mensaje_partes.append(f"*{titulo_general}*")
-
-    if futuros_y_sin_fecha:
-        lineas_futuras = [_formatear_linea_individual(chat_id, r, user_tz) for r in futuros_y_sin_fecha]
-        mensaje_partes.append("\n".join(lineas_futuras))
-
-    if pasados:
-        mensaje_partes.append("\n--- *Pasados* ---\n")
-        lineas_pasadas = [_formatear_linea_individual(chat_id, r, user_tz) for r in pasados]
-        mensaje_partes.append("\n".join(lineas_pasadas))
+    lineas = [_formatear_linea_individual(chat_id, r, user_tz) for r in recordatorios]
         
-    return "\n".join(mensaje_partes)
+    return "\n".join(lineas)
+
+ITEMS_PER_PAGE = 7 # Podemos definir esto como una constante global aquí
+
+async def enviar_lista_interactiva(
+    update: Update, 
+    context: ContextTypes.DEFAULT_TYPE, 
+    context_key: str, # <-- NUEVO: 'lista', 'borrar', 'editar', 'cambiar'
+    titulos: dict,    # <-- NUEVO: Un diccionario con los títulos
+    page: int = 1, 
+    filtro: str = "futuro"
+):
+    """
+    Función universal y reutilizable para enviar una lista interactiva.
+    Ahora es consciente del contexto para generar los botones correctos.
+    """
+    chat_id = update.effective_chat.id
+    recordatorios_pagina, total_items = get_recordatorios(chat_id, filtro=filtro, page=page, items_per_page=ITEMS_PER_PAGE)
+
+    # --- LÓGICA PARA LISTAS VACÍAS ---
+    if total_items == 0:
+        if filtro == "futuro":
+            mensaje = get_text("lista_vacia")
+            # Añadimos el context_key al callback_data
+            keyboard = [[InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+        else: # filtro == "pasado"
+            mensaje = "🗂️ No tienes recordatorios PASADOS."
+            # Añadimos el context_key al callback_data
+            keyboard = [[InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(text=mensaje, reply_markup=reply_markup)
+        return
+
+    total_pages = ceil(total_items / ITEMS_PER_PAGE)
+    
+    # Usamos los títulos del diccionario que nos pasan
+    titulo = titulos[filtro] # Accedemos al título de 'futuro' o 'pasado'
+    if total_pages > 1:
+        titulo += f" (Pág. {page}/{total_pages})"
+    titulo += "\n\n"
+        
+    cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
+    mensaje_final = titulo + cuerpo_lista
+    
+    # --- BOTONES CONTEXTUALES ---
+    # El callback_data ahora incluye el 'context_key' para que sepamos "quién es quién"
+    keyboard_row = []
+    if page > 1:
+        keyboard_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}:{filtro}:{context_key}"))
+    if filtro == "futuro":
+        keyboard_row.append(InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}"))
+    else:
+        keyboard_row.append(InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}"))
+    if page < total_pages:
+        keyboard_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}:{filtro}:{context_key}"))
+        
+    keyboard_rows = [keyboard_row]
+    # El botón de limpiar solo aparece si el contexto es 'lista'
+    if filtro == "pasado" and context_key == "lista":
+        keyboard_rows.append([InlineKeyboardButton("🧹 Limpiar", callback_data="limpiar_pasados_ask")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard_rows)
+
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+
+
+
+## GESTIONAR CIERRES DE CONVERSACIÓN
 
 async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """

@@ -3,6 +3,7 @@ import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from telegram.ext import Application
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from personalidad import get_text
 
 # --- Variable Global ---
@@ -40,7 +41,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
         'date',
         run_date=fecha,
         id=f"recordatorio_{rid}",
-        args=[chat_id, user_id, texto],
+        args=[chat_id, user_id, texto, rid],
         misfire_grace_time=60,
         replace_existing=True
     )
@@ -58,7 +59,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
                 'date',
                 run_date=aviso_time,
                 id=f"aviso_{rid}",
-                args=[chat_id, user_id, texto, aviso_previo_min],
+                args=[chat_id, user_id, texto, aviso_previo_min, rid],
                 misfire_grace_time=60,
                 replace_existing=True
             )
@@ -71,28 +72,52 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
             # Imprimimos la confirmación del aviso previo
             print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
 
-async def enviar_recordatorio(chat_id: int, user_id: int, texto: str):
-    """Usa la variable global 'telegram_app' para enviar el mensaje."""
+async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
+    """Envía el recordatorio principal, AHORA CON BOTONES DINÁMICOS."""
     if telegram_app:
         mensaje = get_text("aviso_principal", id=user_id, texto=texto)
+        
+        # --- LÓGICA DE BOTONES DINÁMICOS ---
+        # Por defecto, solo mostramos OK y Hecho
+        keyboard_buttons = [
+            InlineKeyboardButton("👌 OK", callback_data=f"ok:{rid}"),
+            InlineKeyboardButton("✅ Hecho", callback_data=f"mark_done:{rid}")
+        ]
+        
+        # El botón de posponer ya no tiene sentido en el recordatorio principal,
+        # ya que este se actualizará. Lo dejamos solo en el aviso previo.
+
+        keyboard = [keyboard_buttons]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await telegram_app.bot.send_message(
-            chat_id=chat_id,
-            text=mensaje,
-            parse_mode="Markdown"
+            chat_id=chat_id, text=mensaje, parse_mode="Markdown", reply_markup=reply_markup
         )
 
-async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: int):
-    """Usa la variable global 'telegram_app' para enviar el aviso previo."""
+async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: int, rid: str):
+    """Envía el aviso previo, AHORA CON BOTONES DINÁMICOS."""
     if telegram_app:
         horas = minutos // 60
         mins = minutos % 60
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-        
         mensaje = get_text("aviso_previo", tiempo=tiempo_str, id=user_id, texto=texto)
+
+        # --- LÓGICA DE BOTONES DINÁMICOS ---
+        keyboard_buttons = [
+            InlineKeyboardButton("👌 OK", callback_data=f"ok:{rid}"),
+            InlineKeyboardButton("✅ Hecho", callback_data=f"mark_done:{rid}")
+        ]
+        
+        # REGLA 1: Solo mostramos el botón de posponer si el aviso es de MÁS de 10 minutos.
+        if minutos > 10:
+            # Insertamos el botón de posponer en el medio.
+            keyboard_buttons.insert(1, InlineKeyboardButton("⏰ +10 min", callback_data=f"posponer:10:{rid}"))
+
+        keyboard = [keyboard_buttons]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         await telegram_app.bot.send_message(
-            chat_id=chat_id,
-            text=mensaje,
-            parse_mode="Markdown"
+            chat_id=chat_id, text=mensaje, parse_mode="Markdown", reply_markup=reply_markup
         )
 
 def cancelar_avisos(rid: str):

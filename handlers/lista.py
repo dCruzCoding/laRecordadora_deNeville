@@ -1,39 +1,93 @@
-from telegram import Update
-from telegram.ext import ContextTypes
-from db import get_connection
-from utils import construir_mensaje_lista_completa
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
+from db import get_recordatorios, borrar_recordatorios_pasados
+from utils import enviar_lista_interactiva
 from personalidad import get_text
 
-async def lista(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    chat_id = update.effective_chat.id
+# --- DEFINIMOS LOS TÍTULOS PARA CADA CONTEXTO ---
+TITULOS = {
+    "lista": {
+        "futuro": "📜  **RECORDATORIOS**  📜",
+        "pasado": "🗂️  **Recordatorios PASADOS**  🗂️"
+    },
+    "borrar": {
+        "futuro": "🗑️  **BORRAR (Pendientes)**  🗑️",
+        "pasado": "🗑️  **BORRAR (Pasados)**  🗑️"
+    },
+    "editar": {
+        "futuro": "🪄  **EDITAR (Pendientes)**  🪄",
+        "pasado": "🪄  **EDITAR (Pasados)**  🪄"
+    },
+    "cambiar": {
+        "futuro": "🔄  **CAMBIAR ESTADO (Pendientes)**  🔄",
+        "pasado": "🔄  **CAMBIAR ESTADO (Pasados)**  🔄"
+    }
+}
 
-    filtro = None
+async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Punto de entrada para /lista."""
+    await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"])
 
-    if context.args:
-        arg = context.args[0].lower()
-        if arg in ("pendientes", "pendiente"): filtro = 0
-        elif arg in ("hechos", "hecho"): filtro = 1
-        elif arg in ("pasados", "pasado"): filtro = 2
-        else:
-            await update.message.reply_text("⚠️ Uso: /lista [pendientes|hechos|pasados]")
-            return
-
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        query = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ?"
-        params = [chat_id]
-        if filtro is not None:
-            query += " AND estado = ?"
-            params.append(filtro)
-        query += " ORDER BY estado, user_id"
-        cursor.execute(query, tuple(params))
-        recordatorios = cursor.fetchall()
-
-    if not recordatorios:
-        await update.message.reply_text(get_text("lista_vacia"))
-        return
-
-    # Llama a la función universal de clasificación
-    mensaje_final = construir_mensaje_lista_completa(chat_id, recordatorios, "📜 **Lista de Recordatorios** 📜\n")
+async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    UN ÚNICO HANDLER para paginación y pivote que funciona para TODOS los comandos.
+    """
+    query = update.callback_query
+    # callback_data: "list_page:PAG:FILTRO:CONTEXTO" o "list_pivot:FILTRO:CONTEXTO"
+    parts = query.data.split(":")
+    action = parts[0]
     
-    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
+    if action == "list_page":
+        page, filtro, context_key = int(parts[1]), parts[2], parts[3]
+    elif action == "list_pivot":
+        page, filtro, context_key = 1, parts[1], parts[2]
+    
+    # Usamos el context_key para obtener los títulos correctos del diccionario
+    titulos_correctos = TITULOS.get(context_key, TITULOS["lista"]) # Default a 'lista' por seguridad
+
+    await enviar_lista_interactiva(
+        update, context, context_key=context_key, titulos=titulos_correctos, page=page, filtro=filtro
+    )
+
+# --- UN ÚNICO HANDLER INTELIGENTE PARA LA LIMPIEZA ---
+
+async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """El flujo de limpieza se mantiene igual, pero al cancelar vuelve a llamar a la función universal."""
+    query = update.callback_query
+    await query.answer()
+    action = query.data
+
+    if action == "limpiar_pasados_ask":
+        keyboard = [[
+            InlineKeyboardButton("✅ Sí, bórralos", callback_data="limpiar_pasados_confirm"),
+            InlineKeyboardButton("❌ No", callback_data="limpiar_pasados_cancel")
+        ]]
+        await query.edit_message_text(
+            text="⚠️ ¿Estás seguro de que quieres **borrar permanentemente** todos tus recordatorios pasados? Esta acción no se puede deshacer.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            parse_mode="Markdown"
+        )
+
+    elif action == "limpiar_pasados_confirm":
+        num_borrados = borrar_recordatorios_pasados(update.effective_chat.id)
+        await query.edit_message_text(
+            text=f"**¡Fregotego!** 🪄✨\n\n🧹\n🧹\n🧹\n\nSe han **borrado {num_borrados} recordatorios pasados** de tu archivo."
+        )
+
+    elif action == "limpiar_pasados_cancel":
+        # Al cancelar, volvemos a la lista de pasados usando la función universal
+        await enviar_lista_interactiva(
+            update, context, 
+            context_key="lista",
+            titulos=TITULOS["lista"], 
+            page=1, 
+            filtro="pasado"
+        )
+
+
+# --- HANDLERS ---
+
+lista_handler = CommandHandler("lista", lista_cmd)
+# Este único handler ahora maneja tanto paginación como pivote
+lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
+limpiar_pasados_handler = CallbackQueryHandler(limpiar_pasados_callback, pattern=r"^limpiar_pasados_")

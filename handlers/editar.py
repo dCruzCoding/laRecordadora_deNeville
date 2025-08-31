@@ -4,40 +4,22 @@ from telegram.ext import (
 )
 from datetime import datetime
 from db import get_connection, get_config
-from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado, construir_mensaje_lista_completa
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado, enviar_lista_interactiva
 from avisos import cancelar_avisos, programar_avisos
+from handlers.lista import TITULOS
 from personalidad import get_text
 
 # Estados para la conversación de edición
 ELEGIR_ID, ELEGIR_OPCION, EDITAR_RECORDATORIO, EDITAR_AVISO = range(4)
 
 async def editar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Punto de entrada para /editar. Muestra la lista de recordatorios."""
-    chat_id = update.effective_chat.id
-    
-    with get_connection() as conn:
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
-            (chat_id,)
-        )
-        recordatorios = cursor.fetchall()
-
-    if not recordatorios:
-        await update.message.reply_text("📭 Criatura, no tienes recordatorios pendientes o pasados que puedas editar.")
-        return ConversationHandler.END
-
-    mensaje_lista = construir_mensaje_lista_completa(
-        chat_id, 
-        recordatorios, 
-        titulo_general="🪄 Recordatorios para Editar 🪄\n"
+    """Punto de entrada para /editar."""
+    # --- ¡LÓGICA DE LISTA REEMPLAZADA! ---
+    await enviar_lista_interactiva(
+        update, context, context_key="editar", titulos=TITULOS["editar"]
     )
-
-    mensaje_final = mensaje_lista + "\n\n" + "\n✏️ Escribe el ID del recordatorio que quieras editar o /cancelar para salir:"
-
-    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
+
 
 async def recibir_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Recibe el ID del recordatorio a editar y muestra las opciones."""

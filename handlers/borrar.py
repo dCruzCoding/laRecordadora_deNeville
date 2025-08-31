@@ -7,38 +7,25 @@ from telegram.ext import (
     filters
 )
 from db import get_connection, get_config
-from utils import cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado, construir_mensaje_lista_completa
+from utils import cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado, enviar_lista_interactiva
 from avisos import cancelar_avisos
+from handlers.lista import TITULOS
 from personalidad import get_text
 
 ELEGIR_ID, CONFIRMAR = range(2)
 
 async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Punto de entrada para /borrar."""
-
     if context.args:
-        # Modo rápido: el usuario ya proveyó los IDs.
-        # Pasamos a la función de procesamiento.
         return await _procesar_ids(update, context, context.args)
     
-    # Modo interactivo: mostramos la lista.
-    chat_id = update.effective_chat.id
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id", 
-            (chat_id,)
-        )
-        recordatorios = cursor.fetchall()
-
-    if not recordatorios:
-        await update.message.reply_text("📭 No tienes recordatorios para borrar.")
-        return ConversationHandler.END
-
-    mensaje_lista = construir_mensaje_lista_completa(chat_id, recordatorios, titulo_general="🗑️ Recordatorios para Borrar 🗑️ \n")
+    # --- ¡LÓGICA DE LISTA REEMPLAZADA! ---
+    # Simplemente llamamos a la función universal con nuestro contexto
+    await enviar_lista_interactiva(
+        update, context, context_key="borrar", titulos=TITULOS["borrar"]
+    )
     
-    mensaje_final = mensaje_lista + "\n\n" + "\n✏️ Escribe el/los ID que quieras borrar..."
-    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
+    # Le decimos al ConversationHandler que ahora espere el ID del usuario
     return ELEGIR_ID
 
 async def recibir_ids(update: Update, context: ContextTypes.DEFAULT_TYPE):
