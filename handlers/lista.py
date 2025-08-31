@@ -1,8 +1,8 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
-from db import get_recordatorios, borrar_recordatorios_pasados
-from utils import enviar_lista_interactiva
-from personalidad import get_text
+from db import borrar_recordatorios_pasados
+from utils import enviar_lista_interactiva, cancelar_callback
+from avisos import cancelar_avisos
 
 # --- DEFINIMOS LOS TÍTULOS PARA CADA CONTEXTO ---
 TITULOS = {
@@ -69,7 +69,11 @@ async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT
         )
 
     elif action == "limpiar_pasados_confirm":
-        num_borrados = borrar_recordatorios_pasados(update.effective_chat.id)
+        num_borrados, ids_borrados = borrar_recordatorios_pasados(update.effective_chat.id)
+
+        for rid in ids_borrados:
+            cancelar_avisos(str(rid))
+
         await query.edit_message_text(
             text=f"**¡Fregotego!** 🪄✨\n\n🧹\n🧹\n🧹\n\nSe han **borrado {num_borrados} recordatorios pasados** de tu archivo."
         )
@@ -88,6 +92,6 @@ async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT
 # --- HANDLERS ---
 
 lista_handler = CommandHandler("lista", lista_cmd)
-# Este único handler ahora maneja tanto paginación como pivote
 lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
 limpiar_pasados_handler = CallbackQueryHandler(limpiar_pasados_callback, pattern=r"^limpiar_pasados_")
+lista_cancelar_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_cancel$")

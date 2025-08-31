@@ -172,7 +172,8 @@ async def enviar_lista_interactiva(
     context_key: str, # <-- NUEVO: 'lista', 'borrar', 'editar', 'cambiar'
     titulos: dict,    # <-- NUEVO: Un diccionario con los títulos
     page: int = 1, 
-    filtro: str = "futuro"
+    filtro: str = "futuro",
+    mostrar_boton_cancelar: bool = False
 ):
     """
     Función universal y reutilizable para enviar una lista interactiva.
@@ -211,9 +212,10 @@ async def enviar_lista_interactiva(
     cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
     mensaje_final = titulo + cuerpo_lista
     
-    # --- BOTONES CONTEXTUALES ---
-    # El callback_data ahora incluye el 'context_key' para que sepamos "quién es quién"
+    # --- BOTONES EN UNA ÚNICA FILA ---
     keyboard_row = []
+    
+    # 1. Paginación y Pivote
     if page > 1:
         keyboard_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}:{filtro}:{context_key}"))
     if filtro == "futuro":
@@ -223,12 +225,15 @@ async def enviar_lista_interactiva(
     if page < total_pages:
         keyboard_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}:{filtro}:{context_key}"))
         
-    keyboard_rows = [keyboard_row]
-    # El botón de limpiar solo aparece si el contexto es 'lista'
+    # 2. Acciones (Limpiar, Cancelar)
     if filtro == "pasado" and context_key == "lista":
-        keyboard_rows.append([InlineKeyboardButton("🧹 Limpiar", callback_data="limpiar_pasados_ask")])
-
-    reply_markup = InlineKeyboardMarkup(keyboard_rows)
+        keyboard_row.append(InlineKeyboardButton("🧹", callback_data="limpiar_pasados_ask"))
+    
+    if mostrar_boton_cancelar:
+        keyboard_row.append(InlineKeyboardButton("❌", callback_data="list_cancel"))
+        
+    # Empaquetamos la fila única en la estructura final
+    reply_markup = InlineKeyboardMarkup([keyboard_row]) if keyboard_row else None
 
     if update.callback_query:
         await update.callback_query.answer()
@@ -263,3 +268,19 @@ async def comando_inesperado(update: Update, context: ContextTypes.DEFAULT_TYPE)
     NO termina la conversación.
     """
     await update.message.reply_text(get_text("error_interrupcion"))
+
+
+async def cancelar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Callback para el botón [X]. Llama a la función de cancelar estándar.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    # Editamos el mensaje original para mostrar la confirmación de cancelación
+    await query.edit_message_text(text=get_text("cancelar"))
+    
+    # Limpiamos los datos y terminamos la conversación
+    if context.user_data:
+        context.user_data.clear()
+    return ConversationHandler.END

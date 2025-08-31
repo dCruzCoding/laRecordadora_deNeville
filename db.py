@@ -2,7 +2,6 @@ import sqlite3
 from config import OWNER_ID # Necesitaremos el OWNER_ID para la migración
 from datetime import datetime 
 import pytz
-from avisos import cancelar_avisos
 
 DB_PATH = "la_recordadora.db"
 
@@ -91,7 +90,21 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
             query_base += " AND fecha_hora IS NOT NULL AND fecha_hora <= ?"
             params.append(now_aware.isoformat())
 
-        # 1. Contamos el TOTAL de recordatorios que cumplen el filtro.
+        # --- ¡NUEVA LÓGICA! ---
+        elif filtro == "hoy":
+            # "Hoy" es desde las 00:00:00 hasta las 23:59:59 en la TZ del usuario
+            start_of_day_local = now_aware.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day_local = now_aware.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+            # Convertimos esos límites a UTC para consultar la base de datos
+            start_of_day_utc = start_of_day_local.astimezone(pytz.utc)
+            end_of_day_utc = end_of_day_local.astimezone(pytz.utc)
+            
+            # Buscamos recordatorios PENDIENTES entre esas dos marcas de tiempo
+            query_base += " AND estado = 0 AND fecha_hora >= ? AND fecha_hora <= ?"
+            params.extend([start_of_day_utc.isoformat(), end_of_day_utc.isoformat()])
+
+        # Contamos el TOTAL de recordatorios que cumplen el filtro.
         cursor.execute(f"SELECT COUNT(id) {query_base}", tuple(params))
         total_items = cursor.fetchone()[0]
 
@@ -108,6 +121,24 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
 
         return recordatorios_pagina, total_items
 
+def get_todos_los_chat_ids() -> list[int]:
+    """
+    Obtiene una lista de todos los chat_id únicos de los usuarios
+    que tienen al menos un recordatorio o configuración.
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Usamos UNION para obtener IDs de ambas tablas y DISTINCT para evitar duplicados
+        cursor.execute("""
+            SELECT DISTINCT chat_id FROM recordatorios
+            UNION
+            SELECT DISTINCT chat_id FROM configuracion
+        """)
+        # El resultado es una lista de tuplas, ej: [(123,), (456,)]
+        # Lo convertimos a una lista simple de enteros.
+        return [item[0] for item in cursor.fetchall()]
+
+
 # --- LIMPIEZA DE DATOS ---
 def borrar_recordatorios_pasados(chat_id: int) -> int:
     """
@@ -121,27 +152,31 @@ def borrar_recordatorios_pasados(chat_id: int) -> int:
     with get_connection() as conn:
         cursor = conn.cursor()
         
-        # Primero, obtenemos los IDs de los jobs del scheduler que vamos a necesitar cancelar
         cursor.execute(
             "SELECT id FROM recordatorios WHERE chat_id = ? AND fecha_hora IS NOT NULL AND fecha_hora <= ?",
             (chat_id, now_aware.isoformat())
         )
-        # El resultado es una lista de tuplas, ej: [(123,), (124,)]
+        # Obtenemos los IDs ANTES de borrar
         ids_a_borrar = [item[0] for item in cursor.fetchall()]
 
-        # Ahora, borramos los recordatorios de la base de datos
+        if not ids_a_borrar:
+            return 0, []
+
+        # Usamos los IDs obtenidos para el borrado
+        # Esto es más seguro que repetir la lógica del WHERE
+        placeholders = ','.join(['?'] * len(ids_a_borrar))
         cursor.execute(
-            "DELETE FROM recordatorios WHERE chat_id = ? AND fecha_hora IS NOT NULL AND fecha_hora <= ?",
-            (chat_id, now_aware.isoformat())
+            f"DELETE FROM recordatorios WHERE id IN ({placeholders})",
+            tuple(ids_a_borrar)
         )
         num_borrados = cursor.rowcount
         conn.commit()
 
-    # Cancelamos los avisos asociados a los recordatorios borrados
-    for rid in ids_a_borrar:
-        cancelar_avisos(str(rid)) # Asumimos que cancelar_avisos está disponible
+    # --- YA NO CANCELAMOS AVISOS AQUÍ ---
 
-    return num_borrados
+    # Devolvemos tanto el número como los IDs
+    return num_borrados, ids_a_borrar
+
 def resetear_base_de_datos():
     """Elimina TODOS los recordatorios de la base de datos."""
     with get_connection() as conn:

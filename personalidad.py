@@ -61,7 +61,7 @@ TEXTOS = {
         "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
         "🔄 /cambiar – Cuando por fín logres terminar algo, o cuando luego veas que te confundiste y todavía no lo acabaste.\n"
         "🪄 /editar – Para modificar un recordatorio que ya has creado (o su aviso).\n"
-        "\n⚙️ /ajustes – Para añadir o quitar confirmaciones de borrado o cambio de estado, y cambiar la zona horaria.\n"
+        "\n⚙️ /ajustes – Para personalizar tus manías: modo seguro, tu zona horaria y si quieres (y a qué hora) mi resumen mañanero.\n"
         "\n❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
     "ayuda_admin": [
@@ -130,7 +130,6 @@ TEXTOS = {
         "✅ Bien, ya está. He guardado tu modo de seguridad en el nivel *{nivel}* (_{descripcion}_). A ver cuánto tardas en arrepentirte.",
         "✨ Perfecto, criatura. La configuración ha quedado fijada en nivel *{nivel}* (_{descripcion}_), por arte de magia."
     ],
-
     "niveles_modo_seguro": {
         "0": "Sin confirmaciones",
         "1": "Confirmar solo al borrar",
@@ -161,6 +160,12 @@ TEXTOS = {
     "timezone_buscando": [
         "👵 Buscando '{ciudad}' en mi bola de cristal... Dame un segundo, que ya no tengo la vista que tenía.",
         "👵 A ver dónde para esa ciudad de '{ciudad}'... Un momento, estoy consultando mis mapas mágicos.",
+    ],
+    "ajustes_resumen_menu": [
+        "🗓️ *Resumen Diario*\n\n"
+        "¿Quieres que te dé un rapapolvo mañanero con tus tareas del día? Aquí puedes decidir si te molesto y a qué hora.\n\n"
+        "Estado actual: *{estado}*\n"
+        "Hora programada: *{hora}*"
     ],
 
     # --- Avisos ---
@@ -197,6 +202,13 @@ TEXTOS = {
     ],
     "aviso_reprogramado": [
         "✅ ¡Venga, te he vuelto a poner el aviso para `#{id}`! ¡Que no se te pase!"
+    ],
+
+    # --- Resumen Diario ---
+    "resumen_diario_con_tareas": [
+        "👵 ¡Buenos días, criatura! Más te vale no holgazanear, que para hoy tienes estas tareas:",
+        "👵 ¡Arriba, gandul! El sol ya ha salido y estas son tus obligaciones para hoy:",
+        "👵 Venga, a levantarse. Te he preparado el desayuno y la lista de tus quehaceres de hoy. No me decepciones."
     ],
 
     # --- Errores ---

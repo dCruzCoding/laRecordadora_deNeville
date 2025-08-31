@@ -5,10 +5,13 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from personalidad import get_text
+# from handlers.resumen_diario import enviar_resumen_para_usuario
+from datetime import datetime
+import bot_state
 
 # --- Variable Global ---
-# Guardará la instancia de la aplicación de PTB para poder usar el bot
-telegram_app: Application = None
+# # Guardará la instancia de la aplicación de PTB para poder usar el bot
+# telegram_app: Application = None
 
 # --- Configuración del Scheduler ---
 scheduler = AsyncIOScheduler(
@@ -19,11 +22,11 @@ scheduler = AsyncIOScheduler(
 )
 
 async def iniciar_scheduler(app: Application):
-    """Guarda la instancia de la app de Telegram y arranca el scheduler."""
-    global telegram_app
-    telegram_app = app
+    """Guarda la instancia de la app, arranca el scheduler y programa el resumen diario."""
+    bot_state.telegram_app = app
     if not scheduler.running:
         scheduler.start()
+        print("⏰ Scheduler iniciado.")
 
 def detener_scheduler():
     """Detiene el scheduler de forma segura."""
@@ -74,7 +77,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
 
 async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
     """Envía el recordatorio principal, AHORA CON BOTONES DINÁMICOS."""
-    if telegram_app:
+    if bot_state.telegram_app:
         mensaje = get_text("aviso_principal", id=user_id, texto=texto)
         
         # --- LÓGICA DE BOTONES DINÁMICOS ---
@@ -90,13 +93,13 @@ async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
         keyboard = [keyboard_buttons]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await telegram_app.bot.send_message(
+        await bot_state.telegram_appbot.send_message(
             chat_id=chat_id, text=mensaje, parse_mode="Markdown", reply_markup=reply_markup
         )
 
 async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: int, rid: str):
     """Envía el aviso previo, AHORA CON BOTONES DINÁMICOS."""
-    if telegram_app:
+    if bot_state.telegram_app:
         horas = minutos // 60
         mins = minutos % 60
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
@@ -115,8 +118,8 @@ async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: i
 
         keyboard = [keyboard_buttons]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
-        await telegram_app.bot.send_message(
+
+        await bot_state.telegram_app.bot.send_message(
             chat_id=chat_id, text=mensaje, parse_mode="Markdown", reply_markup=reply_markup
         )
 
@@ -133,3 +136,38 @@ def cancelar_todos_los_avisos():
     if scheduler.running:
         scheduler.remove_all_jobs()
     print("🔥 Todos los avisos programados han sido eliminados.")
+
+def programar_resumen_diario_usuario(chat_id: int, hora_str: str, tz_str: str):
+    """
+    Programa (o reprograma) el job del resumen diario para un usuario.
+    """
+    # Importación local para evitar el problema de carga circular
+    from handlers.resumen_diario import enviar_resumen_para_usuario
+    
+    try:
+        hora, minuto = map(int, hora_str.split(':'))
+        scheduler.add_job(
+            enviar_resumen_para_usuario,
+            trigger='cron',
+            hour=hora,
+            minute=minuto,
+            timezone=tz_str, # ¡Usamos la zona horaria del usuario!
+            id=f'resumen_diario_{chat_id}',
+            args=[chat_id],
+            replace_existing=True # Si ya existe un job con ese ID, lo reemplaza
+        )
+        print(f"🗓️ Resumen diario (re)programado para el usuario {chat_id} a las {hora_str} ({tz_str})")
+    except Exception as e:
+        print(f"🚨 Error al programar el resumen para {chat_id}: {e}")
+
+def cancelar_resumen_diario_usuario(chat_id: int):
+    """
+    Cancela el job del resumen diario para un usuario.
+    """
+    job_id = f'resumen_diario_{chat_id}'
+    try:
+        if scheduler.get_job(job_id):
+            scheduler.remove_job(job_id)
+            print(f"🗓️ Resumen diario cancelado para el usuario {chat_id}")
+    except Exception as e:
+        print(f"🚨 Error al cancelar el resumen para {chat_id}: {e}")

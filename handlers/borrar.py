@@ -9,7 +9,7 @@ from telegram.ext import (
 from db import get_connection, get_config
 from utils import cancelar_conversacion, formatear_fecha_para_mensaje, comando_inesperado, enviar_lista_interactiva
 from avisos import cancelar_avisos
-from handlers.lista import TITULOS
+from handlers.lista import TITULOS, lista_cancelar_handler
 from personalidad import get_text
 
 ELEGIR_ID, CONFIRMAR = range(2)
@@ -22,7 +22,7 @@ async def borrar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # --- ¡LÓGICA DE LISTA REEMPLAZADA! ---
     # Simplemente llamamos a la función universal con nuestro contexto
     await enviar_lista_interactiva(
-        update, context, context_key="borrar", titulos=TITULOS["borrar"]
+        update, context, context_key="borrar", titulos=TITULOS["borrar"], mostrar_boton_cancelar=True
     )
     
     # Le decimos al ConversationHandler que ahora espere el ID del usuario
@@ -146,7 +146,8 @@ borrar_handler = ConversationHandler(
         CONFIRMAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_borrado)]
     },
     fallbacks=[
+        lista_cancelar_handler, # <-- ¡AÑÁDELO AQUÍ!
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado)
     ],
 )

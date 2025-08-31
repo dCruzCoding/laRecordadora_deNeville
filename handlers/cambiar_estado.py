@@ -10,7 +10,7 @@ from datetime import datetime
 from db import get_connection, get_config
 from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, enviar_lista_interactiva
 from avisos import cancelar_avisos, programar_avisos
-from handlers.lista import TITULOS
+from handlers.lista import TITULOS, lista_cancelar_handler
 from personalidad import get_text
 import pytz
 
@@ -24,7 +24,7 @@ async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE)
         
     # --- ¡LÓGICA DE LISTA REEMPLAZADA! ---
     await enviar_lista_interactiva(
-        update, context, context_key="cambiar", titulos=TITULOS["cambiar"]
+        update, context, context_key="cambiar", titulos=TITULOS["cambiar"], mostrar_boton_cancelar=True
     )
     return ELEGIR_ID
 
@@ -269,7 +269,8 @@ cambiar_estado_handler = ConversationHandler(
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },
     fallbacks=[
+        lista_cancelar_handler, # <-- ¡AÑÁDELO AQUÍ!
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado)
     ],
 )

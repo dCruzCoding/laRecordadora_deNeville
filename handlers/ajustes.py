@@ -14,12 +14,13 @@ from telegram.ext import (
     CallbackQueryHandler,
     filters
 )
-# Ahora necesitamos get_config para mostrar el estado actual
+import re
 from db import get_config, set_config, get_connection
 from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
 from utils import cancelar_conversacion, comando_inesperado
+from avisos import programar_resumen_diario_usuario, cancelar_resumen_diario_usuario
 
 # Estados de la nueva conversación unificada
 MENU_PRINCIPAL, \
@@ -28,18 +29,24 @@ ZONA_HORARIA_MENU, \
 ZONA_HORARIA_PIDE_UBICACION, \
 ZONA_HORARIA_PIDE_CIUDAD, \
 ZONA_HORARIA_CONFIRMAR_CIUDAD, \
-CONFIRMAR_ACTUALIZACION_TZ = range(7)
+CONFIRMAR_ACTUALIZACION_TZ, \
+RESUMEN_DIARIO_MENU, \
+RESUMEN_DIARIO_PIDE_HORA = range(9)
 
 # --- INICIO Y MENÚ PRINCIPAL ---
 async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el menú principal de ajustes."""
     keyboard = [
-        [InlineKeyboardButton("🛡️ Modo Seguro", callback_data="set_modo_seguro")],
-        [InlineKeyboardButton("🌍 Zona Horaria", callback_data="set_zona_horaria")],
+        [
+            InlineKeyboardButton("🛡️", callback_data="set_modo_seguro"),
+            InlineKeyboardButton("🌍", callback_data="set_zona_horaria"),
+            InlineKeyboardButton("🗓️", callback_data="set_resumen_diario"),
+            InlineKeyboardButton("❌", callback_data="ajustes_cancel")
+        ]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text("⚙️ ¿Qué quieres modificar?", reply_markup=reply_markup)
+
+    await update.message.reply_text("⚙️ ¿Qué quieres modificar?\n\n🛡️ -> Modo seguro    🌍 -> Zona horaria \n🗓️ -> Resumen diario     ❌ -> Cancelar", reply_markup=reply_markup)
     return MENU_PRINCIPAL
 
 # --- Rama 1: Flujo del Modo Seguro ---
@@ -57,6 +64,8 @@ async def menu_modo_seguro(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         [InlineKeyboardButton("🗑️ Nivel 1 (Confirmar borrado)", callback_data="nivel_seguro:1")],
         [InlineKeyboardButton("🔄 Nivel 2 (Confirmar cambio)", callback_data="nivel_seguro:2")],
         [InlineKeyboardButton("🔒 Nivel 3 (Confirmar ambos)", callback_data="nivel_seguro:3")],
+        # --- ¡BOTÓN VOLVER AÑADIDO! ---
+        [InlineKeyboardButton("<< Volver al menú principal", callback_data="ajustes_volver_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -106,6 +115,8 @@ async def menu_zona_horaria(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = [
         [InlineKeyboardButton("🪄 Automático (con ubicación)", callback_data="tz_auto")],
         [InlineKeyboardButton("✍️ Manual (escribir ciudad)", callback_data="tz_manual")],
+        # --- ¡BOTÓN VOLVER AÑADIDO! ---
+        [InlineKeyboardButton("<< Volver al menú principal", callback_data="ajustes_volver_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -274,38 +285,182 @@ async def procesar_actualizacion_tz(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text("✅ ¡Entendido! He actualizado todos tus recordatorios a tu nueva zona horaria.")
     else: # tz_update_no
         await query.edit_message_text("👍 De acuerdo. Tus recordatorios antiguos conservarán la zona horaria con la que fueron creados.")
-        
+    
+    # --- ¡LÓGICA DE EVENTOS! ---
+    # Reprogramamos el resumen con la nueva TZ (si está activado)
+    if get_config(chat_id, "resumen_diario_activado") == '1':
+        hora = get_config(chat_id, "resumen_diario_hora") or "08:00"
+        nueva_tz = context.user_data.get("nueva_tz", "UTC")
+        programar_resumen_diario_usuario(chat_id, hora, nueva_tz)
+
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Construcción del ConversationHandler Unificado ---
+# --- ¡NUEVA RAMA DE LA CONVERSACIÓN PARA EL RESUMEN DIARIO! ---
+
+async def menu_resumen_diario(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Muestra el menú de configuración del resumen diario."""
+    query = update.callback_query
+    await query.answer()
+    chat_id = update.effective_chat.id
+
+    # Obtenemos la configuración actual del usuario, con valores por defecto
+    activado = get_config(chat_id, "resumen_diario_activado") == '1'
+    hora = get_config(chat_id, "resumen_diario_hora") or "08:00"
+
+    # Preparamos los textos para el mensaje
+    estado_str = "✅ Activado" if activado else "❌ Desactivado"
+    texto_boton_toggle = "❌ Desactivar" if activado else "✅ Activar"
+    
+    # Creamos los botones
+    keyboard = [
+        [InlineKeyboardButton(f"{texto_boton_toggle}", callback_data="resumen_toggle")],
+        [InlineKeyboardButton("🕑 Cambiar hora", callback_data="resumen_change_time")],
+        [InlineKeyboardButton("<< Volver", callback_data="ajustes_volver_menu")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    mensaje = get_text("ajustes_resumen_menu", estado=estado_str, hora=hora)
+    await query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+    return RESUMEN_DIARIO_MENU
+
+async def toggle_resumen_diario(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Activa o desactiva el resumen diario."""
+    query = update.callback_query
+    await query.answer()
+    chat_id = update.effective_chat.id
+
+    activado_actual = get_config(chat_id, "resumen_diario_activado") == '1'
+    nuevo_estado = '0' if activado_actual else '1'
+    set_config(chat_id, "resumen_diario_activado", nuevo_estado)
+
+    # --- ¡LÓGICA DE EVENTOS! ---
+    if nuevo_estado == '1':
+        # Si se activa, leemos la hora y la TZ y programamos el job
+        hora = get_config(chat_id, "resumen_diario_hora") or "08:00"
+        tz = get_config(chat_id, "user_timezone") or "UTC"
+        programar_resumen_diario_usuario(chat_id, hora, tz)
+    else:
+        # Si se desactiva, cancelamos el job
+        cancelar_resumen_diario_usuario(chat_id)
+
+    return await menu_resumen_diario(update, context)
+
+async def pedir_hora_resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Pide al usuario que ESCRIBA la hora."""
+    query = update.callback_query
+    await query.answer()
+    
+    # Eliminamos el teclado de botones para que pueda escribir
+    await query.edit_message_text(
+        text="👵 ¿A qué hora del día quieres que te envíe el resumen?\n\n"
+             "Escríbela en formato `HH:MM` (ej: `08:30` o `22:15`)."
+    )
+    return RESUMEN_DIARIO_PIDE_HORA
+
+async def guardar_hora_resumen(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe y valida la hora escrita por el usuario."""
+    chat_id = update.effective_chat.id
+    hora_escrita = update.message.text.strip()
+
+    # Usamos una expresión regular para validar el formato HH:MM
+    if not re.fullmatch(r"([01]\d|2[0-3]):([0-5]\d)", hora_escrita):
+        await update.message.reply_text("❗ ¡Formato incorrecto, criatura! Usa `HH:MM`, por ejemplo `09:00`.")
+        return RESUMEN_DIARIO_PIDE_HORA # Mantenemos al usuario en este paso
+
+    # Si el formato es correcto, guardamos y reprogramamos
+    set_config(chat_id, "resumen_diario_hora", hora_escrita)
+    
+    if get_config(chat_id, "resumen_diario_activado") == '1':
+        tz = get_config(chat_id, "user_timezone") or "UTC"
+        programar_resumen_diario_usuario(chat_id, hora_escrita, tz)
+    
+    # Enviamos un mensaje de confirmación y terminamos la conversación
+    await update.message.reply_text(f"✅ ¡Entendido! He programado tu resumen diario para las *{hora_escrita}*.", parse_mode="Markdown")
+    
+    # Limpiamos los datos y finalizamos
+    context.user_data.clear()
+    return ConversationHandler.END
+
+# --- FUNCIÓN "VOLVER" CENTRALIZADA ---
+
+# async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+#     """Callback genérico para los botones 'Volver'. Vuelve al menú principal de /ajustes."""
+#     query = update.callback_query
+#     await query.answer()
+    
+#     # Creamos un menú "falso" para reutilizar la función de entrada
+#     class FakeUpdate:
+#         def __init__(self, message): self.message = message
+            
+#     # Editamos el mensaje actual para mostrar el menú principal de nuevo
+#     await query.edit_message_text(text="⚙️ ¿Qué quieres modificar?")
+#     await ajustes_cmd(FakeUpdate(query.message), context) # Llama a ajustes_cmd para que ponga los botones
+#     return MENU_PRINCIPAL
+
+
+async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback para los botones 'Volver'. Vuelve a mostrar el menú principal de /ajustes."""
+    query = update.callback_query
+    await query.answer()
+    # Usamos una versión "falsa" de `update` para llamar a la función original del menú
+    class FakeUpdate:
+        def __init__(self, message):
+            self.message = message
+    await query.delete_message() # Borramos el mensaje de submenú
+    await ajustes_cmd(FakeUpdate(query.message), context) # Mostramos el menú principal de nuevo
+    return MENU_PRINCIPAL
+
+# --- NUEVA FUNCIÓN PARA CERRAR EL MENÚ ---
+async def cancelar_ajustes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Se activa al pulsar el botón [X] en el menú de ajustes.
+    EDITA el mensaje a la confirmación de cancelación y termina la conversación.
+    """
+    query = update.callback_query
+    await query.answer()
+    
+    # --- ¡CAMBIO AQUÍ! ---
+    # En lugar de borrar, editamos el mensaje para que coincida con /cancelar
+    await query.edit_message_text(text=get_text("cancelar"))
+    
+    # Termina la conversación
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+# --- CONVERSATION HANDLER ACTUALIZADO ---
+
 ajustes_handler = ConversationHandler(
     entry_points=[CommandHandler("ajustes", ajustes_cmd)],
     states={
         MENU_PRINCIPAL: [
             CallbackQueryHandler(menu_modo_seguro, pattern="^set_modo_seguro$"),
             CallbackQueryHandler(menu_zona_horaria, pattern="^set_zona_horaria$"),
+            CallbackQueryHandler(menu_resumen_diario, pattern="^set_resumen_diario$"),
+            CallbackQueryHandler(cancelar_ajustes_callback, pattern="^ajustes_cancel$"),
         ],
         MODO_SEGURO_MENU: [
-            CallbackQueryHandler(recibir_nivel_callback, pattern=r"^nivel_seguro:\d$")
+            CallbackQueryHandler(recibir_nivel_callback, pattern=r"^nivel_seguro:\d$"),
+            CallbackQueryHandler(volver_menu_principal_ajustes, pattern="^ajustes_volver_menu$"),
         ],
         ZONA_HORARIA_MENU: [
             CallbackQueryHandler(tz_metodo_automatico, pattern="^tz_auto$"),
             CallbackQueryHandler(tz_metodo_manual, pattern="^tz_manual$"),
+            CallbackQueryHandler(volver_menu_principal_ajustes, pattern="^ajustes_volver_menu$"),
         ],
-        ZONA_HORARIA_PIDE_UBICACION: [
-            MessageHandler(filters.LOCATION, recibir_ubicacion),
-            MessageHandler(filters.TEXT & ~filters.COMMAND, error_pide_ubicacion) 
+
+        RESUMEN_DIARIO_MENU: [
+            CallbackQueryHandler(toggle_resumen_diario, pattern="^resumen_toggle$"),
+            CallbackQueryHandler(pedir_hora_resumen, pattern="^resumen_change_time$"),
+            CallbackQueryHandler(volver_menu_principal_ajustes, pattern="^ajustes_volver_menu$"),
         ],
-        ZONA_HORARIA_PIDE_CIUDAD: [
-            MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ciudad),
-            MessageHandler(filters.LOCATION, error_pide_ciudad)
+        RESUMEN_DIARIO_PIDE_HORA: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_hora_resumen),
         ],
-        ZONA_HORARIA_CONFIRMAR_CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad)],
-        CONFIRMAR_ACTUALIZACION_TZ: [CallbackQueryHandler(procesar_actualizacion_tz, pattern=r"^tz_update_")]
     },
     fallbacks=[
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado)
     ],
 )

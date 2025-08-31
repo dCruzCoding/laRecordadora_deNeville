@@ -19,6 +19,7 @@ from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
 from utils import cancelar_conversacion, comando_inesperado
+from avisos import programar_resumen_diario_usuario
 
 # Estados para la nueva conversación de bienvenida
 ONBOARDING_ELIGE_MODO_SEGURO, \
@@ -154,8 +155,12 @@ async def recibir_ubicacion_onboarding(update: Update, context: ContextTypes.DEF
 
     if user_timezone:
         # Éxito: Guardamos la zona horaria y marcamos el onboarding como completo
-        set_config(chat_id, "user_timezone", user_timezone)
-        set_config(chat_id, "onboarding_completo", "1")
+        set_config(chat_id, "resumen_diario_activado", "1")
+        set_config(chat_id, "resumen_diario_hora", "08:00")
+
+        # --- ¡LÓGICA DE EVENTOS! ---
+        # Programamos el primer job para el nuevo usuario
+        programar_resumen_diario_usuario(chat_id, "08:00", user_timezone)
         
         mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
         
@@ -222,6 +227,12 @@ async def confirmar_ciudad_onboarding(update: Update, context: ContextTypes.DEFA
             # Éxito: Guardamos todo y finalizamos el onboarding
             set_config(chat_id, "user_timezone", user_timezone)
             set_config(chat_id, "onboarding_completo", "1")
+            set_config(chat_id, "resumen_diario_activado", "1")
+            set_config(chat_id, "resumen_diario_hora", "08:00")
+
+            # --- ¡LÓGICA DE EVENTOS! ---
+            # Programamos el primer job para el nuevo usuario
+            programar_resumen_diario_usuario(chat_id, "08:00", user_timezone)
             
             mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
             await update.message.reply_text(
