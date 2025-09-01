@@ -57,7 +57,6 @@ def run_telegram_bot():
 
     print("🤖 La Recordadora (bot de Telegram) está en marcha...")
     try:
-        app.add_handler(start_onboarding.start_handler)
         app.run_polling()
     finally:
         avisos.detener_scheduler()
