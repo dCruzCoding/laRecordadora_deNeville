@@ -109,7 +109,7 @@ TEXTOS = {
         "👍 ¡Hecho! He actualizado el recordatorio `#{user_id}`. Ahora es: _{texto}_ ({fecha})."
     ],
     "editar_confirmacion_aviso": [
-        "👍 ¡Listo! He cambiado el aviso para el recordatorio `#{user_id}` a *{aviso_nuevo}* antes."
+        "👍 ¡Listo! He cambiado el aviso para el recordatorio `#{user_id}` a **{aviso_nuevo}** antes."
     ],
 
     # --- Ajustes ---
@@ -188,6 +188,10 @@ TEXTOS = {
         "👵⚠️ Que no se te olvide, en {tiempo} te toca: '{texto}'. ¡Ve acabando lo que sea que estés haciendo!",
         "👵⚠️ Te aviso con tiempo para que no tengas excusas. En {tiempo}: '{texto}'.",
         "👵⚠️ Dentro de {tiempo} tienes esto: '{texto}'. Y llama a tu abuela que la tienes abandonada."
+    ],
+    "error_aviso_pasado_reintentar": [
+        "👵 ¡Criatura, que no soy una giratiempo! Esa hora para el aviso ya ha pasado.\n\nElige un tiempo que sea en el futuro, o pon `0` si ya no quieres el aviso.",
+        "🤨 ¿Pretendes que te avise en el pasado? ¡Concéntrate!\n\nEscribe un tiempo de aviso válido (ej: `30m`, `1h`) o `0` para cancelar el aviso."
     ],
 
     # --- Operaciones (Borrar, Cambiar) ---

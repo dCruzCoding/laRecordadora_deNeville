@@ -72,8 +72,7 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
         tuple: (Una lista de recordatorios para la página, el número total de ítems que coinciden con el filtro)
     """
     # Necesitamos la hora actual para los filtros de tiempo
-    user_tz_str = get_config(chat_id, "user_timezone") or 'UTC'
-    now_aware = datetime.now(pytz.timezone(user_tz_str))
+    now_utc_iso = datetime.now(pytz.utc).isoformat()
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -84,17 +83,17 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
 
         # Aplicamos el filtro de tiempo
         if filtro == "futuro":
-            query_base += " AND estado = 0 AND (fecha_hora IS NULL OR fecha_hora > ?)"
-            params.append(now_aware.isoformat())
+            query_base += " AND (fecha_hora IS NULL OR fecha_hora > ?)"
+            params.append(now_utc_iso)
         elif filtro == "pasado":
             query_base += " AND fecha_hora IS NOT NULL AND fecha_hora <= ?"
-            params.append(now_aware.isoformat())
+            params.append(now_utc_iso)
 
         # --- ¡NUEVA LÓGICA! ---
         elif filtro == "hoy":
             # "Hoy" es desde las 00:00:00 hasta las 23:59:59 en la TZ del usuario
-            start_of_day_local = now_aware.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day_local = now_aware.replace(hour=23, minute=59, second=59, microsecond=999999)
+            start_of_day_local = now_utc_iso.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_of_day_local = now_utc_iso.replace(hour=23, minute=59, second=59, microsecond=999999)
 
             # Convertimos esos límites a UTC para consultar la base de datos
             start_of_day_utc = start_of_day_local.astimezone(pytz.utc)

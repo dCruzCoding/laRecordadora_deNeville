@@ -56,7 +56,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
     if aviso_previo_min > 0:
         aviso_time = fecha - timedelta(minutes=aviso_previo_min)
         # Comparamos con la hora actual con zona horaria
-        if aviso_time > datetime.now(tz=scheduler.timezone):
+        if aviso_time > datetime.now(pytz.utc):
             scheduler.add_job(
                 enviar_aviso_previo,
                 'date',
@@ -74,6 +74,13 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
             
             # Imprimimos la confirmación del aviso previo
             print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            aviso_programado_bn = True
+
+        else:
+            print(f"  ❌└─ Aviso previo para '{rid}' omitido porque su hora ya ha pasado.")
+            aviso_programado_bn = False
+    
+    return aviso_programado_bn
 
 async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
     """Envía el recordatorio principal, AHORA CON BOTONES DINÁMICOS."""
@@ -93,7 +100,7 @@ async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
         keyboard = [keyboard_buttons]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        await bot_state.telegram_appbot.send_message(
+        await bot_state.telegram_app.bot.send_message(
             chat_id=chat_id, text=mensaje, parse_mode="Markdown", reply_markup=reply_markup
         )
 

@@ -102,36 +102,56 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
         # Esto no debería pasar, pero es una salvaguarda
         await update.message.reply_text("¡Uy! Se me ha ido el santo al cielo. ¿Podemos empezar de nuevo? Usa /recordar.")
         return ConversationHandler.END
+    
+    # Si el usuario elige no poner aviso (0), el flujo termina con éxito.
+    if minutos == 0:
+        # Guardamos el '0' en la DB
+        with get_connection() as conn:
+            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
+            conn.commit()
+        
+        await update.message.reply_text(get_text("aviso_no_programado"))
+        context.user_data.clear()
+        return ConversationHandler.END
+    
+    # Si el recordatorio no tiene fecha, no podemos programar aviso.
+    if not info.get("fecha"):
+        await update.message.reply_text(get_text("error_aviso_sin_fecha"))
+        return AVISO_PREVIO # Le pedimos que lo intente de nuevo (o ponga 0)
 
-    # Actualizamos el recordatorio en la base de datos con el valor de aviso_previo
-    with get_connection() as conn:
-        conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
-        conn.commit()
 
-    # Programamos el aviso con la información completa
-    if info.get("fecha"): # Solo programamos si hay fecha
-        await programar_avisos(
-            update.effective_chat.id, 
-            str(info["global_id"]), 
-            info["user_id"], 
-            info["texto"], 
-            info["fecha"], 
-            minutos
-        )
+    # Llamamos a la función y guardamos el resultado
+    se_programo_aviso = await programar_avisos(
+        update.effective_chat.id, 
+        str(info["global_id"]), 
+        info["user_id"], 
+        info["texto"], 
+        info["fecha"], 
+        minutos
+    )
 
-    # Enviamos la confirmación final sobre el aviso
-    if minutos > 0:
+    # Si el aviso se programó con éxito, terminamos.
+    if se_programo_aviso:
+        # Guardamos el valor correcto en la DB
+        with get_connection() as conn:
+            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
+            conn.commit()
+            
         horas = minutos // 60
         mins = minutos % 60
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-        mensaje_aviso = get_text("aviso_programado", tiempo=tiempo_str)
-    else:
-        mensaje_aviso = get_text("aviso_no_programado")
-
-    await update.message.reply_text(mensaje_aviso)
+        mensaje_confirmacion = get_text("aviso_programado", tiempo=tiempo_str)
+        
+        await update.message.reply_text(mensaje_confirmacion)
+        context.user_data.clear()
+        return ConversationHandler.END
     
-    context.user_data.clear()
-    return ConversationHandler.END
+    # Si el aviso NO se programó (porque ya pasó), informamos y nos quedamos en el mismo estado.
+    else:
+        mensaje_error = get_text("error_aviso_pasado_reintentar")
+        await update.message.reply_text(mensaje_error)
+        return AVISO_PREVIO # ¡La clave! Volvemos a pedir el dato.
+
 
 
 # Conversational handler para registrar en main.py
