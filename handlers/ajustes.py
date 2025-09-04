@@ -20,7 +20,7 @@ from personalidad import get_text, TEXTOS
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
 from utils import cancelar_conversacion, comando_inesperado
-from avisos import programar_resumen_diario_usuario, cancelar_resumen_diario_usuario
+from avisos_resumen_diario import programar_resumen_diario_usuario, cancelar_resumen_diario_usuario
 
 # Estados de la nueva conversación unificada
 MENU_PRINCIPAL, \
