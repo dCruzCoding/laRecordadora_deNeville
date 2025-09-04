@@ -21,7 +21,7 @@ from utils import (
     enviar_lista_interactiva, parsear_recordatorio, parsear_tiempo_a_minutos, 
     cancelar_conversacion, comando_inesperado, convertir_utc_a_local
 )
-from handlers.lista import TITULOS, lista_cancelar_handler
+from handlers.lista import TITULOS, lista_cancel_handler
 from avisos import cancelar_avisos, programar_avisos
 from personalidad import get_text
 
@@ -284,7 +284,7 @@ editar_handler = ConversationHandler(
         EDITAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_nuevo_aviso)],
     },
     fallbacks=[
-        lista_cancelar_handler,
+        lista_cancel_handler,
         CommandHandler("cancelar", cancelar_conversacion),
         MessageHandler(filters.COMMAND, comando_inesperado)
     ],

@@ -1,10 +1,27 @@
+# handlers/lista.py
+"""
+Módulo Controlador de Listas Interactivas.
+
+Este archivo es el corazón de la interfaz de usuario para visualizar recordatorios.
+No solo gestiona el comando /lista, sino que también centraliza la lógica
+para manejar los botones de paginación (<<, >>), el cambio de vista (pivote)
+y las acciones contextuales (Limpiar, Cancelar) para TODAS las listas del bot
+(usadas en /borrar, /editar, etc.).
+"""
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
+
 from db import borrar_recordatorios_pasados
 from utils import enviar_lista_interactiva, cancelar_callback
 from avisos import cancelar_avisos
 
-# --- DEFINIMOS LOS TÍTULOS PARA CADA CONTEXTO ---
+# =============================================================================
+# DEFINICIÓN DE TÍTULOS
+# =============================================================================
+
+# Diccionario centralizado de títulos para cada contexto de lista.
+# Esto permite que la función de UI en utils.py sea agnóstica al contenido.
 TITULOS = {
     "lista": {
         "futuro": "📜  **RECORDATORIOS**  📜",
@@ -24,38 +41,53 @@ TITULOS = {
     }
 }
 
+# =============================================================================
+# FUNCIONES DE CALLBACK
+# =============================================================================
+
 async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Punto de entrada para /lista."""
+    """Punto de entrada para el comando /lista. Muestra la vista por defecto."""
     await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"])
+
 
 async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    UN ÚNICO HANDLER para paginación y pivote que funciona para TODOS los comandos.
+    Handler universal para los botones de paginación y pivote.
+    Extrae el estado del callback_data y redibuja la lista con los parámetros correctos.
     """
     query = update.callback_query
-    # callback_data: "list_page:PAG:FILTRO:CONTEXTO" o "list_pivot:FILTRO:CONTEXTO"
+    # Formato del callback_data: "accion:val1:val2:contexto:cancel_flag"
     parts = query.data.split(":")
     action = parts[0]
     
+    # Desempaquetamos los datos según la acción
     if action == "list_page":
-        page, filtro, context_key = int(parts[1]), parts[2], parts[3]
-        mostrar_cancelar = parts[4] == "1" if len(parts) > 4 else False
+        page = int(parts[1])
+        filtro, context_key, cancel_flag = parts[2], parts[3], parts[4]
     elif action == "list_pivot":
-        page = 1
-        filtro, context_key = parts[1], parts[2]
-        mostrar_cancelar = parts[3] == "1" if len(parts) > 3 else False
-    
-    # Usamos el context_key para obtener los títulos correctos del diccionario
-    titulos_correctos = TITULOS.get(context_key, TITULOS["lista"]) # Default a 'lista' por seguridad
+        page = 1 # Al cambiar de vista, siempre volvemos a la página 1.
+        filtro, context_key, cancel_flag = parts[1], parts[2], parts[3]
+    else:
+        # Fallback por si llega una acción desconocida.
+        return
+
+    mostrar_cancelar = (cancel_flag == "1")
+    titulos_correctos = TITULOS.get(context_key, TITULOS["lista"])
 
     await enviar_lista_interactiva(
-        update, context, context_key=context_key, titulos=titulos_correctos, page=page, filtro=filtro, mostrar_boton_cancelar=mostrar_cancelar
+        update, context, 
+        context_key=context_key, 
+        titulos=titulos_correctos, 
+        page=page, 
+        filtro=filtro, 
+        mostrar_boton_cancelar=mostrar_cancelar
     )
 
-# --- UN ÚNICO HANDLER INTELIGENTE PARA LA LIMPIEZA ---
 
 async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """El flujo de limpieza se mantiene igual, pero al cancelar vuelve a llamar a la función universal."""
+    """
+    Maneja el flujo de confirmación para limpiar el archivo de recordatorios pasados.
+    """
     query = update.callback_query
     await query.answer()
     action = query.data
@@ -70,35 +102,40 @@ async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
-
     elif action == "limpiar_pasados_confirm":
         num_borrados, ids_borrados = borrar_recordatorios_pasados(update.effective_chat.id)
-
         for rid in ids_borrados:
             cancelar_avisos(str(rid))
-
         await query.edit_message_text(
-            text=f"**¡Fregotego!** 🪄✨\n\n🧹\n🧹\n🧹\n\nSe han **borrado {num_borrados} recordatorios pasados** de tu archivo."
+            text=f"🪄✨ ¡Fregotego!\n\nSe han borrado {num_borrados} recordatorios pasados de tu archivo.",
+            parse_mode="Markdown"
         )
-
     elif action == "limpiar_pasados_cancel":
-        # Al cancelar, volvemos a la lista de pasados usando la función universal
-        await enviar_lista_interactiva(
-            update, context, 
-            context_key="lista",
-            titulos=TITULOS["lista"], 
-            page=1, 
-            filtro="pasado"
-        )
+        # Si cancela, le volvemos a mostrar la lista de pasados.
+        await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"], page=1, filtro="pasado")
+
 
 async def placeholder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Los botones placeholder simplemente responden al callback para que no parezca que están rotos."""
+    """Responde a los clics en botones invisibles para que el cliente de Telegram no muestre un error."""
     await update.callback_query.answer()
 
-# --- HANDLERS ---
 
-lista_handler = CommandHandler("lista", lista_cmd)
+# =============================================================================
+# EXPORTACIÓN DE HANDLERS
+# =============================================================================
+# Estos handlers son importados y registrados en main.py.
+
+# Handler para el comando inicial /lista
+lista_command_handler = CommandHandler("lista", lista_cmd)
+
+# Handler para los botones de navegación (<<, >>, PENDIENTES, PASADOS)
 lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
+
+# Handler para el flujo de limpieza de recordatorios pasados
 limpiar_pasados_handler = CallbackQueryHandler(limpiar_pasados_callback, pattern=r"^limpiar_pasados_")
-lista_cancelar_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_cancel$")
+
+# Handler para el botón universal de cancelación [X] en las listas
+lista_cancel_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_cancel$")
+
+# Handler para los botones placeholder invisibles
 placeholder_handler = CallbackQueryHandler(placeholder_callback, pattern=r"^placeholder$")

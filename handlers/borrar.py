@@ -15,7 +15,7 @@ from datetime import datetime
 from db import get_connection, get_config
 from utils import cancelar_conversacion, comando_inesperado, enviar_lista_interactiva, convertir_utc_a_local, normalizar_texto
 from avisos import cancelar_avisos
-from handlers.lista import TITULOS, lista_cancelar_handler
+from handlers.lista import TITULOS, lista_cancel_handler
 from personalidad import get_text
 
 # --- DEFINICIÓN DE ESTADOS ---
@@ -178,7 +178,7 @@ borrar_handler = ConversationHandler(
         CONFIRMAR: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_borrado)]
     },
     fallbacks=[
-        lista_cancelar_handler,
+        lista_cancel_handler,
         CommandHandler("cancelar", cancelar_conversacion),
         MessageHandler(filters.COMMAND, comando_inesperado)
     ],

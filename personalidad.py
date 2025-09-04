@@ -28,20 +28,33 @@ TEXTOS: Dict[str, List[str]] = {
         "Mi misión es asegurarme de que no se te olvide nada importante. ¡Y más te vale hacerme caso!"
     ],
     "onboarding_informacion": [
-        "*La Recordadora* 🔮 es una herramienta mágica que te ayudará a recordar tus tareas y compromisos. Es muy fácil de usar:\n\n"
-        "➕📝 *AÑADIR RECORDATORIO:*\n"
-        "Usa el comando /recordar. Por ejemplo:\n"
+        "*La Recordadora* 🔮 es tu asistente personal mágico. ¡Presta atención a cómo funciono!\n\n"
+        
+        "➕ *AÑADIR RECORDATORIOS*\n"
+        "Usa el comando /recordar con el formato `fecha * texto`. Por ejemplo:\n"
         "`/recordar mañana a las 15:00 * Comprar ingredientes para la poción multijugos`\n"
-        "Después de apuntarlo, siempre te preguntaré si quieres que te dé un **aviso previo** (ej: `1h`, `30m`).\n\n"
-        "📝👀 *VER TUS RECORDATORIOS:*\n"
-        "Con /lista podrás ver todos tus recordatorios de forma interactiva. Verás que cada tarea tiene un icono:\n"
-        "  - `⬜️`: Esto es algo que tienes **pendiente**.\n"
-        "  - `✅`: Esto es algo que ya has marcado como **hecho**. ¡Bien por ti!\n\n"
-        "Además, podrás cambiar fácilmente entre la vista de recordatorios pendientes y la de `PASADOS` usando los botones.\n"
-        "\n\n⚠️ *IMPORTANTE! ⚠️\n\n🕰️🌍 LA ZONA HORARIA:*\n"
-        "Para que te avise a la hora que quieres, es *crucial* que configures bien tu zona horaria en /ajustes. Así me aseguro de que un aviso para las 10 de la mañana te llegue a *tus* 10 de la mañana, y no a las mías.\n\n"
+        "Después, siempre te preguntaré si quieres un **aviso previo**.\n\n"
+
+        "📜 *GESTIONAR TUS LISTAS*\n"
+        "El comando /lista abre tu centro de mandos interactivo. Desde ahí, podrás:\n"
+        "  - `📜 PENDIENTES` / `🗂️ PASADOS`: Usa los botones para cambiar entre la vista de tus tareas futuras y las que ya han expirado.\n"
+        "  - `<<` y `>>`: Navega entre las páginas si tienes muchos recordatorios.\n"
+        "  - `🧹 Limpiar`: Borra todo tu archivo de pasados con un solo clic.\n\n"
+
+        "🔔 *NOTIFICACIONES INTELIGENTES*\n"
+        "Cuando te llegue un aviso, ¡no es solo texto! Tendrá botones para que actúes al momento:\n"
+        "  - `✅ Hecho`: Marca la tarea como completada.\n"
+        "  - `⏰ +10 min`: Pospone el recordatorio 10 minutos.\n"
+        "  - `👌 OK`: Simplemente descarta la notificación.\n\n"
+
+        "🌞 *TU RESUMEN MAÑANERO*\n"
+        "Para que empieces el día con buen pie, **cada mañana a las 8:00** te enviaré un resumen con las tareas que tienes para hoy. ¡No tienes que hacer nada, ya está activado!\n"
+        "Si prefieres otra hora o no quieres que te moleste, puedes cambiarlo todo en **/ajustes**.\n\n"
+
+        "⚠️ *MUY IMPORTANTE: LA ZONA HORARIA*\n"
+        "Para que los avisos y el resumen te lleguen a *tu* hora y no a la mía, es crucial que configures bien tu zona horaria en **/ajustes**.\n\n"
         "-------------------\n"
-        "Si quieres ver el listado completo de los comandos disponibles, usa /ayuda en cualquier momento."
+        "Para ver la lista completa de comandos, usa /ayuda en cualquier momento."
     ],
     "onboarding_pide_modo_seguro": [
         "⚙️ Antes de empezar, ayúdame a ajustar la configuración inicial.\n\n"

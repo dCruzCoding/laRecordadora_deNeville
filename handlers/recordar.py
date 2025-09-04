@@ -1,21 +1,31 @@
+# handlers/recordar.py
+"""
+Módulo para el comando /recordar.
+
+Gestiona una conversación de dos pasos para crear un nuevo recordatorio:
+1.  Pide y procesa la fecha y el texto del recordatorio.
+2.  Pide y procesa un tiempo de aviso previo opcional.
+Soporta un modo rápido donde toda la información se puede dar en el comando inicial.
+"""
+
 from telegram import Update
-from telegram.ext import (
-    ContextTypes,
-    ConversationHandler,
-    CommandHandler,
-    MessageHandler,
-    filters
-)
-from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
+
 from db import get_connection, get_config
+from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
 from avisos import programar_avisos
 from personalidad import get_text
 
-# Estados de la conversación
+# --- DEFINICIÓN DE ESTADOS ---
 FECHA_TEXTO, AVISO_PREVIO = range(2)
 
+
+# =============================================================================
+# FUNCIONES DE LA CONVERSACIÓN
+# =============================================================================
+
 async def recordar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Punto de entrada para /recordar."""
+    """Punto de entrada para /recordar. Dirige al modo rápido o interactivo"""
     if context.args:
         # Modo rápido: si ya se da la info, se salta el primer paso
         entrada = " ".join(context.args)
@@ -27,134 +37,122 @@ async def recordar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return FECHA_TEXTO
 
 async def recibir_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recibe la fecha y el texto del usuario."""
+    """Recibe la fecha y el texto del usuario en el modo interactivo."""
     entrada = update.message.text
     return await _procesar_fecha_texto(update, context, entrada)
 
 async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE, entrada: str):
     """
-    Función centralizada para procesar el recordatorio, guardarlo y pedir el aviso.
-    AHORA CON SOPORTE PARA ZONA HORARIA.
+    Función central del primer paso: parsea, valida y guarda el recordatorio inicial en la DB.
     """
-    chat_id = update.effective_chat.id # Movemos esto al principio para usarlo ya
-
-    # --- ¡CAMBIO 1: Obtener la zona horaria del usuario! ---
-    # Leemos la zona horaria guardada en la DB. Si no existe, usamos 'UTC' como valor por defecto seguro.
+    chat_id = update.effective_chat.id
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
 
-    # --- ¡CAMBIO 2: Usar la zona horaria al parsear! ---
-    # Ahora le pasamos la zona horaria del usuario a la función de parseo.
+    # 1. Parsear la entrada del usuario.
     texto, fecha, error = parsear_recordatorio(entrada, user_timezone=user_tz)
 
     if error:
-        await update.message.reply_text(get_text("error_formato"))
+        await update.message.reply_text(error)
+        # Si estamos en modo rápido y falla el parseo, terminamos. Si no, pedimos reintentar.
+        return FECHA_TEXTO if not context.args else ConversationHandler.END
+    
+    # 2. Validación extra: no permitir recordatorios con texto vacío.
+    if not texto:
+        await update.message.reply_text("👵 ¡Criatura, no puedes crear un recordatorio sin nada que recordar! Inténtalo de nuevo.")
         return FECHA_TEXTO if not context.args else ConversationHandler.END
 
-    # --- NUEVO FLUJO ---
+    # 3. Guardar en la base de datos y obtener IDs.
     fecha_iso = fecha.isoformat() if fecha else None
-    
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute("SELECT MAX(user_id) FROM recordatorios WHERE chat_id = ?", (chat_id,))
-        ultimo_id = cursor.fetchone()[0]
-        nuevo_user_id = (ultimo_id or 0) + 1
-
+        
+        # --- LÓGICA DE ID OPTIMIZADA ---
+        # Calculamos el siguiente user_id de forma atómica y segura con una subconsulta.
+        # Esto es más eficiente que hacer un SELECT MAX() separado.
         cursor.execute(
-            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone) 
-               VALUES (?, ?, ?, ?, 0, 0, ?)""",
-            (nuevo_user_id, chat_id, texto, fecha_iso, user_tz)
+            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, aviso_previo, timezone) 
+               VALUES ((SELECT IFNULL(MAX(user_id), 0) + 1 FROM recordatorios WHERE chat_id = ?), ?, ?, ?, 0, ?)""",
+            (chat_id, chat_id, texto, fecha_iso, user_tz)
         )
         recordatorio_id_global = cursor.lastrowid
+        
+        # Obtenemos el user_id que acabamos de insertar.
+        cursor.execute("SELECT user_id FROM recordatorios WHERE id = ?", (recordatorio_id_global,))
+        nuevo_user_id = cursor.fetchone()[0]
         conn.commit()
 
+    # 4. Guardar información para el siguiente paso y confirmar al usuario.
     context.user_data["recordatorio_info"] = {
-        "global_id": recordatorio_id_global,
-        "user_id": nuevo_user_id,
-        "texto": texto,
-        "fecha": fecha
+        "global_id": recordatorio_id_global, "user_id": nuevo_user_id,
+        "texto": texto, "fecha": fecha
     }
 
-    fecha_local_para_mostrar = convertir_utc_a_local(fecha, user_tz)
-
-    fecha_str = fecha_local_para_mostrar.strftime("%d %b %Y, %H:%M") if fecha_local_para_mostrar else "Sin fecha"
+    fecha_local = convertir_utc_a_local(fecha, user_tz)
+    fecha_str = fecha_local.strftime("%d %b, %H:%M") if fecha_local else "Sin fecha"
     mensaje_guardado = get_text("recordatorio_guardado", id=nuevo_user_id, texto=texto, fecha=fecha_str)
+    
     await update.message.reply_text(mensaje_guardado, parse_mode="Markdown")
-
     await update.message.reply_text(get_text("recordar_pide_aviso"), parse_mode="Markdown")
+    
     return AVISO_PREVIO
 
 
-async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Recibe el tiempo de aviso previo, actualiza el recordatorio en la DB,
-    y programa el aviso final.
+    Segundo paso: recibe el tiempo de aviso, lo valida, lo guarda y programa los jobs.
     """
-    aviso_str = update.message.text.strip().lower()
-    minutos = parsear_tiempo_a_minutos(aviso_str)
+    minutos = parsear_tiempo_a_minutos(update.message.text)
 
+    # Validación 1: Formato de tiempo incorrecto.
     if minutos is None:
         await update.message.reply_text(get_text("error_aviso_invalido"))
-        return AVISO_PREVIO
+        return AVISO_PREVIO # Mantiene al usuario en este paso.
 
-    # Recuperamos la información del recordatorio que guardamos en el paso anterior
     info = context.user_data.get("recordatorio_info")
     if not info:
-        # Esto no debería pasar, pero es una salvaguarda
-        await update.message.reply_text("¡Uy! Se me ha ido el santo al cielo. ¿Podemos empezar de nuevo? Usa /recordar.")
+        await update.message.reply_text("👵 ¡Uy! Algo se ha perdido. ¿Podemos empezar de nuevo con /recordar?")
         return ConversationHandler.END
     
-    # Si el usuario elige no poner aviso (0), el flujo termina con éxito.
+    # Caso 1: El usuario no quiere aviso.
     if minutos == 0:
-        # Guardamos el '0' en la DB
-        with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
-            conn.commit()
-        
         await update.message.reply_text(get_text("aviso_no_programado"))
+        # El 'aviso_previo' en la DB ya es 0 por defecto, no hace falta actualizar.
         context.user_data.clear()
         return ConversationHandler.END
     
-    # Si el recordatorio no tiene fecha, no podemos programar aviso.
+    # Caso 2: El recordatorio no tiene fecha.
     if not info.get("fecha"):
         await update.message.reply_text(get_text("error_aviso_sin_fecha"))
-        return AVISO_PREVIO # Le pedimos que lo intente de nuevo (o ponga 0)
-
-
-    # Llamamos a la función y guardamos el resultado
+        return AVISO_PREVIO
+    
+    # Caso 3: Intentamos programar el aviso.
     se_programo_aviso = await programar_avisos(
-        update.effective_chat.id, 
-        str(info["global_id"]), 
-        info["user_id"], 
-        info["texto"], 
-        info["fecha"], 
-        minutos
+        update.effective_chat.id, str(info["global_id"]), info["user_id"], 
+        info["texto"], info["fecha"], minutos
     )
 
-    # Si el aviso se programó con éxito, terminamos.
     if se_programo_aviso:
-        # Guardamos el valor correcto en la DB
+        # Si tiene éxito, guardamos los minutos en la DB y terminamos.
         with get_connection() as conn:
             conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
             conn.commit()
             
-        horas = minutos // 60
-        mins = minutos % 60
+        horas, mins = divmod(minutos, 60)
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
         mensaje_confirmacion = get_text("aviso_programado", tiempo=tiempo_str)
         
         await update.message.reply_text(mensaje_confirmacion)
         context.user_data.clear()
         return ConversationHandler.END
-    
-    # Si el aviso NO se programó (porque ya pasó), informamos y nos quedamos en el mismo estado.
     else:
-        mensaje_error = get_text("error_aviso_pasado_reintentar")
-        await update.message.reply_text(mensaje_error)
-        return AVISO_PREVIO # ¡La clave! Volvemos a pedir el dato.
+        # Si falla (hora pasada), informamos y pedimos reintentar.
+        await update.message.reply_text(get_text("error_aviso_pasado_reintentar"))
+        return AVISO_PREVIO
 
 
-
-# Conversational handler para registrar en main.py
+# =============================================================================
+# CONVERSATION HANDLER
+# =============================================================================
 recordar_handler = ConversationHandler(
     entry_points=[CommandHandler("recordar", recordar_cmd)],
     states={
@@ -163,6 +161,6 @@ recordar_handler = ConversationHandler(
     },
     fallbacks=[
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado)
     ],
 )

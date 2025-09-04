@@ -25,7 +25,7 @@ from db import get_config, get_recordatorios
 from personalidad import get_text
 
 # --- CONSTANTES ---
-ITEMS_PER_PAGE = 7  # Nº de recordatorios a mostrar por página en las listas interactivas.
+ITEMS_PER_PAGE = 10  # Nº de recordatorios a mostrar por página en las listas interactivas.
 
 
 # =============================================================================

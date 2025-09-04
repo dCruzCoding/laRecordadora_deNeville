@@ -16,7 +16,7 @@ import pytz
 from db import get_connection, get_config
 from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, enviar_lista_interactiva, normalizar_texto
 from avisos import cancelar_avisos, programar_avisos
-from handlers.lista import TITULOS, lista_cancelar_handler
+from handlers.lista import TITULOS, lista_cancel_handler
 from personalidad import get_text
 
 # --- DEFINICIÓN DE ESTADOS ---
@@ -227,7 +227,7 @@ cambiar_estado_handler = ConversationHandler(
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },
     fallbacks=[
-        lista_cancelar_handler,
+        lista_cancel_handler,
         CommandHandler("cancelar", cancelar_conversacion),
         MessageHandler(filters.COMMAND, comando_inesperado)
     ],
