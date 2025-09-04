@@ -85,7 +85,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
         enviar_recordatorio, 'date', run_date=fecha, id=f"recordatorio_{rid}",
         args=[chat_id, user_id, texto, rid], misfire_grace_time=60, replace_existing=True
     )
-    print(f"✅ Recordatorio programado: '{rid}' para las {fecha.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"✅ Recordatorio programado: '{rid}' para las {fecha.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
 
     # 2. Programar el aviso previo (si aplica y es en el futuro)
     if aviso_previo_min > 0:
@@ -98,7 +98,7 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
             )
             horas, mins = divmod(aviso_previo_min, 60)
             tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-            print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
             aviso_previo_programado = True
         else:
             print(f"  ❌└─ Aviso previo para '{rid}' omitido porque su hora ya ha pasado.")

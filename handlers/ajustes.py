@@ -1,109 +1,135 @@
-from telegram import (
-    Update, 
-    InlineKeyboardButton, 
-    InlineKeyboardMarkup, 
-    ReplyKeyboardMarkup, 
-    ReplyKeyboardRemove, 
-    KeyboardButton
-)
-from telegram.ext import (
-    ContextTypes,
-    ConversationHandler,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    filters
-)
+# handlers/ajustes.py
+"""
+Módulo para el comando /ajustes.
+
+Gestiona una conversación compleja con múltiples ramas para permitir al usuario
+configurar el Modo Seguro, la Zona Horaria y las preferencias del Resumen Diario.
+"""
+
 import re
-from db import get_config, set_config, get_connection
-from personalidad import get_text, TEXTOS
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
-from utils import cancelar_conversacion, comando_inesperado
+
+from db import get_config, set_config, get_connection
+from personalidad import get_text, TEXTOS
+from utils import cancelar_conversacion, comando_inesperado, normalizar_texto
 from avisos_resumen_diario import programar_resumen_diario_usuario, cancelar_resumen_diario_usuario
 
-# Estados de la nueva conversación unificada
-MENU_PRINCIPAL, \
-MODO_SEGURO_MENU, \
-ZONA_HORARIA_MENU, \
-ZONA_HORARIA_PIDE_UBICACION, \
-ZONA_HORARIA_PIDE_CIUDAD, \
-ZONA_HORARIA_CONFIRMAR_CIUDAD, \
-CONFIRMAR_ACTUALIZACION_TZ, \
-RESUMEN_DIARIO_MENU, \
-RESUMEN_DIARIO_PIDE_HORA = range(9)
+# --- DEFINICIÓN DE ESTADOS DE LA CONVERSACIÓN ---
+# Usar un enum o constantes nombradas hace el código más legible que range().
+(
+    MENU_PRINCIPAL, MODO_SEGURO_MENU, ZONA_HORARIA_MENU,
+    ZONA_HORARIA_PIDE_UBICACION, ZONA_HORARIA_PIDE_CIUDAD,
+    ZONA_HORARIA_CONFIRMAR_CIUDAD, CONFIRMAR_ACTUALIZACION_TZ,
+    RESUMEN_DIARIO_MENU, RESUMEN_DIARIO_PIDE_HORA,
+) = range(9)
 
-# --- INICIO Y MENÚ PRINCIPAL ---
+
+
+# =============================================================================
+# SECCIÓN 1: PUNTO DE ENTRADA Y MENÚ PRINCIPAL
+# =============================================================================
+
 async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Muestra el menú principal de ajustes."""
-    keyboard = [
-        [
-            InlineKeyboardButton("🛡️", callback_data="set_modo_seguro"),
-            InlineKeyboardButton("🌍", callback_data="set_zona_horaria"),
-            InlineKeyboardButton("🗓️", callback_data="set_resumen_diario"),
-            InlineKeyboardButton("❌", callback_data="ajustes_cancel")
-        ]
-    ]
+    """Inicia la conversación de /ajustes y muestra el menú principal."""
+    keyboard = [[
+        InlineKeyboardButton("🛡️", callback_data="set_modo_seguro"),
+        InlineKeyboardButton("🌍", callback_data="set_zona_horaria"),
+        InlineKeyboardButton("🗓️", callback_data="set_resumen_diario"),
+        InlineKeyboardButton("❌", callback_data="ajustes_cancel")
+    ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-
-    await update.message.reply_text("⚙️ ¿Qué quieres modificar?\n\n🛡️ -> Modo seguro    🌍 -> Zona horaria \n🗓️ -> Resumen diario     ❌ -> Cancelar", reply_markup=reply_markup)
+    # El texto incluye una pequeña leyenda para que los iconos sean comprensibles.
+    await update.message.reply_text(
+        "⚙️ Elige una opción:\n\n"
+        "🛡️ Modo Seguro | 🌍 Zona Horaria\n"
+        "🗓️ Resumen Diario | ❌ Cerrar",
+        reply_markup=reply_markup
+    )
     return MENU_PRINCIPAL
 
-# --- Rama 1: Flujo del Modo Seguro ---
-async def menu_modo_seguro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Muestra los niveles de modo seguro como botones inline."""
+async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback para los botones 'Volver'. Borra el submenú y muestra el menú principal de nuevo."""
     query = update.callback_query
     await query.answer()
+    # Para evitar errores de "Message to edit not found", borramos el mensaje del
+    # submenú y enviamos uno nuevo con el menú principal. Es más robusto.
+    await query.delete_message()
+    return await ajustes_cmd(update, context)
+
+# Otra version de volver_menu_principal_ajustes que no borra el mensaje, sino que edita.
+
+# async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+#     """Callback genérico para los botones 'Volver'. Vuelve al menú principal de /ajustes."""
+#     query = update.callback_query
+#     await query.answer()
     
+#     # Creamos un menú "falso" para reutilizar la función de entrada
+#     class FakeUpdate:
+#         def __init__(self, message): self.message = message
+            
+#     # Editamos el mensaje actual para mostrar el menú principal de nuevo
+#     await query.edit_message_text(text="⚙️ ¿Qué quieres modificar?")
+#     await ajustes_cmd(FakeUpdate(query.message), context) # Llama a ajustes_cmd para que ponga los botones
+#     return MENU_PRINCIPAL
+
+
+async def cancelar_ajustes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback para el botón [X]. Edita el mensaje a una confirmación y termina."""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text=get_text("cancelar"))
+    if context.user_data: context.user_data.clear()
+    return ConversationHandler.END
+
+
+
+# =============================================================================
+# SECCIÓN 2: RAMA DE "MODO SEGURO"
+# =============================================================================
+
+async def menu_modo_seguro(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Muestra el submenú para configurar el Modo Seguro."""
+    query = update.callback_query
+    await query.answer()
     chat_id = update.effective_chat.id
     modo_seguro_actual = get_config(chat_id, "modo_seguro") or "0"
     
-    # Creamos un teclado de botones para los niveles
     keyboard = [
         [InlineKeyboardButton("🔓 Nivel 0 (Sin confirmaciones)", callback_data="nivel_seguro:0")],
         [InlineKeyboardButton("🗑️ Nivel 1 (Confirmar borrado)", callback_data="nivel_seguro:1")],
         [InlineKeyboardButton("🔄 Nivel 2 (Confirmar cambio)", callback_data="nivel_seguro:2")],
         [InlineKeyboardButton("🔒 Nivel 3 (Confirmar ambos)", callback_data="nivel_seguro:3")],
-        # --- ¡BOTÓN VOLVER AÑADIDO! ---
-        [InlineKeyboardButton("<< Volver al menú principal", callback_data="ajustes_volver_menu")]
+        [InlineKeyboardButton("<< Volver", callback_data="ajustes_volver_menu")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
     mensaje_pregunta = get_text("ajustes_pide_nivel", nivel=modo_seguro_actual)
-    mensaje_final = "🛡️ Has seleccionado *Modo Seguro*. En este apartado podrás añadir o quitar mensajes de confirmación para las acciones de borrar y cambiar estado.\n\n" + mensaje_pregunta
-    # Editamos el mensaje original para mostrar la pregunta Y los nuevos botones
-    await query.edit_message_text(
-        text=mensaje_final,
-        parse_mode="Markdown",
-        reply_markup=reply_markup
-    )
+    mensaje_final = f"🛡️ *Modo Seguro*\n\n{mensaje_pregunta}"
+    await query.edit_message_text(text=mensaje_final, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
     return MODO_SEGURO_MENU
 
 async def recibir_nivel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recibe la pulsación del botón del nivel de seguridad, lo guarda y confirma."""
+    """Guarda el nivel de Modo Seguro seleccionado y finaliza la conversación."""
     query = update.callback_query
     await query.answer()
     
-    # El callback_data será "nivel_seguro:X"
-    # Lo separamos para obtener solo el número
     nivel_str = query.data.split(":")[1]
-    chat_id = update.effective_chat.id
+    set_config(update.effective_chat.id, "modo_seguro", nivel_str)
     
-    set_config(chat_id, "modo_seguro", nivel_str)
-    
-    # Preparamos el mensaje de confirmación con la descripción
     descripcion_nivel = TEXTOS["niveles_modo_seguro"].get(nivel_str, "Desconocido")
-    mensaje_confirmacion = get_text(
-        "ajustes_confirmados",
-        nivel=nivel_str,
-        descripcion=descripcion_nivel
-    )
+    mensaje_confirmacion = get_text("ajustes_confirmados", nivel=nivel_str, descripcion=descripcion_nivel)
     
-    # Editamos el mensaje original para mostrar la confirmación y quitar los botones
     await query.edit_message_text(text=mensaje_confirmacion, parse_mode="Markdown")
     return ConversationHandler.END
 
-# --- Rama 2: Flujo de la Zona Horaria ---
+
+
+# =============================================================================
+# SECCIÓN 3: RAMA DE "ZONA HORARIA"
+# =============================================================================
+
 async def menu_zona_horaria(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el menú para ELEGIR el método de configuración de la zona horaria."""
     query = update.callback_query
@@ -115,7 +141,6 @@ async def menu_zona_horaria(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     keyboard = [
         [InlineKeyboardButton("🪄 Automático (con ubicación)", callback_data="tz_auto")],
         [InlineKeyboardButton("✍️ Manual (escribir ciudad)", callback_data="tz_manual")],
-        # --- ¡BOTÓN VOLVER AÑADIDO! ---
         [InlineKeyboardButton("<< Volver al menú principal", callback_data="ajustes_volver_menu")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -231,18 +256,25 @@ async def error_pide_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ZONA_HORARIA_PIDE_CIUDAD 
 
 async def confirmar_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recibe el SÍ/NO del usuario para la zona horaria."""
-    respuesta = update.message.text.strip().upper()
-    if respuesta == "SI":
+    """Recibe la respuesta del usuario para la zona horaria y la valida de forma robusta."""
+    
+    # --- ¡LÓGICA DE VALIDACIÓN MEJORADA! ---
+    respuesta_normalizada = normalizar_texto(update.message.text.strip())
+
+    if respuesta_normalizada.startswith("si"):
         user_timezone = context.user_data.get("timezone_a_confirmar")
         if user_timezone:
             return await _guardar_y_preguntar_actualizacion_tz(update, context, user_timezone)
-    elif respuesta == "NO":
+            
+    elif respuesta_normalizada.startswith("no"):
         await update.message.reply_text(get_text("timezone_reintentar"))
         return ZONA_HORARIA_PIDE_CIUDAD
+        
     else:
-        await update.message.reply_text("👵 ¡Criatura! Solo entiendo `SI` o `NO`. Venga, otra vez.")
+        # Si no es ni 'si' ni 'no', le pedimos que lo aclare.
+        await update.message.reply_text("👵 ¡Criatura! Solo entiendo `si` o `no`. Venga, otra vez.")
         return ZONA_HORARIA_CONFIRMAR_CIUDAD
+        
     # Si algo falla (ej. se pierde el user_data), cancelamos
     return await cancelar_conversacion(update, context)
 
@@ -296,7 +328,11 @@ async def procesar_actualizacion_tz(update: Update, context: ContextTypes.DEFAUL
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- ¡NUEVA RAMA DE LA CONVERSACIÓN PARA EL RESUMEN DIARIO! ---
+
+
+# =============================================================================
+# SECCIÓN 4: RAMA DE "RESUMEN DIARIO"
+# =============================================================================
 
 async def menu_resumen_diario(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Muestra el menú de configuración del resumen diario."""
@@ -382,54 +418,11 @@ async def guardar_hora_resumen(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- FUNCIÓN "VOLVER" CENTRALIZADA ---
-
-# async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-#     """Callback genérico para los botones 'Volver'. Vuelve al menú principal de /ajustes."""
-#     query = update.callback_query
-#     await query.answer()
-    
-#     # Creamos un menú "falso" para reutilizar la función de entrada
-#     class FakeUpdate:
-#         def __init__(self, message): self.message = message
-            
-#     # Editamos el mensaje actual para mostrar el menú principal de nuevo
-#     await query.edit_message_text(text="⚙️ ¿Qué quieres modificar?")
-#     await ajustes_cmd(FakeUpdate(query.message), context) # Llama a ajustes_cmd para que ponga los botones
-#     return MENU_PRINCIPAL
 
 
-async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Callback para los botones 'Volver'. Vuelve a mostrar el menú principal de /ajustes."""
-    query = update.callback_query
-    await query.answer()
-    # Usamos una versión "falsa" de `update` para llamar a la función original del menú
-    class FakeUpdate:
-        def __init__(self, message):
-            self.message = message
-    await query.delete_message() # Borramos el mensaje de submenú
-    await ajustes_cmd(FakeUpdate(query.message), context) # Mostramos el menú principal de nuevo
-    return MENU_PRINCIPAL
-
-# --- NUEVA FUNCIÓN PARA CERRAR EL MENÚ ---
-async def cancelar_ajustes_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Se activa al pulsar el botón [X] en el menú de ajustes.
-    EDITA el mensaje a la confirmación de cancelación y termina la conversación.
-    """
-    query = update.callback_query
-    await query.answer()
-    
-    # --- ¡CAMBIO AQUÍ! ---
-    # En lugar de borrar, editamos el mensaje para que coincida con /cancelar
-    await query.edit_message_text(text=get_text("cancelar"))
-    
-    # Termina la conversación
-    context.user_data.clear()
-    return ConversationHandler.END
-
-
-# --- CONVERSATION HANDLER ACTUALIZADO ---
+# =============================================================================
+# CONVERSATION HANDLER
+# =============================================================================
 
 ajustes_handler = ConversationHandler(
     entry_points=[CommandHandler("ajustes", ajustes_cmd)],
@@ -449,7 +442,16 @@ ajustes_handler = ConversationHandler(
             CallbackQueryHandler(tz_metodo_manual, pattern="^tz_manual$"),
             CallbackQueryHandler(volver_menu_principal_ajustes, pattern="^ajustes_volver_menu$"),
         ],
-
+        ZONA_HORARIA_PIDE_UBICACION: [
+            MessageHandler(filters.LOCATION, recibir_ubicacion),
+            MessageHandler(filters.TEXT & ~filters.COMMAND, error_pide_ubicacion) 
+        ],
+        ZONA_HORARIA_PIDE_CIUDAD: [
+            MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ciudad),
+            MessageHandler(filters.LOCATION, error_pide_ciudad)
+        ],
+        ZONA_HORARIA_CONFIRMAR_CIUDAD: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_ciudad)],
+        CONFIRMAR_ACTUALIZACION_TZ: [CallbackQueryHandler(procesar_actualizacion_tz, pattern=r"^tz_update_")],
         RESUMEN_DIARIO_MENU: [
             CallbackQueryHandler(toggle_resumen_diario, pattern="^resumen_toggle$"),
             CallbackQueryHandler(pedir_hora_resumen, pattern="^resumen_change_time$"),
