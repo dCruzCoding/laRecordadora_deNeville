@@ -39,14 +39,17 @@ async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TY
     
     if action == "list_page":
         page, filtro, context_key = int(parts[1]), parts[2], parts[3]
+        mostrar_cancelar = parts[4] == "1" if len(parts) > 4 else False
     elif action == "list_pivot":
-        page, filtro, context_key = 1, parts[1], parts[2]
+        page = 1
+        filtro, context_key = parts[1], parts[2]
+        mostrar_cancelar = parts[3] == "1" if len(parts) > 3 else False
     
     # Usamos el context_key para obtener los títulos correctos del diccionario
     titulos_correctos = TITULOS.get(context_key, TITULOS["lista"]) # Default a 'lista' por seguridad
 
     await enviar_lista_interactiva(
-        update, context, context_key=context_key, titulos=titulos_correctos, page=page, filtro=filtro
+        update, context, context_key=context_key, titulos=titulos_correctos, page=page, filtro=filtro, mostrar_boton_cancelar=mostrar_cancelar
     )
 
 # --- UN ÚNICO HANDLER INTELIGENTE PARA LA LIMPIEZA ---
@@ -88,6 +91,9 @@ async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT
             filtro="pasado"
         )
 
+async def placeholder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Los botones placeholder simplemente responden al callback para que no parezca que están rotos."""
+    await update.callback_query.answer()
 
 # --- HANDLERS ---
 
@@ -95,3 +101,4 @@ lista_handler = CommandHandler("lista", lista_cmd)
 lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
 limpiar_pasados_handler = CallbackQueryHandler(limpiar_pasados_callback, pattern=r"^limpiar_pasados_")
 lista_cancelar_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_cancel$")
+placeholder_handler = CallbackQueryHandler(placeholder_callback, pattern=r"^placeholder$")

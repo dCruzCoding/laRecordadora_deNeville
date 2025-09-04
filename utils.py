@@ -212,28 +212,48 @@ async def enviar_lista_interactiva(
     cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
     mensaje_final = titulo + cuerpo_lista
     
-    # --- BOTONES EN UNA ÚNICA FILA ---
+    # --- BOTONES FIJOS ---
+
+    # Creamos un "sufijo" para el callback_data que llevará toda la información de estado.
+    # El '1' o '0' al final representa el estado de mostrar_boton_cancelar.
+    cancel_flag = "1" if mostrar_boton_cancelar else "0"
+    callback_sufijo = f":{filtro}:{context_key}:{cancel_flag}"
+
     keyboard_row = []
+    paginacion_row = []
     
-    # 1. Paginación y Pivote
+    # Columna Izquierda: Botón "Anterior" o un placeholder
     if page > 1:
-        keyboard_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}:{filtro}:{context_key}"))
-    if filtro == "futuro":
-        keyboard_row.append(InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}"))
+        paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}{callback_sufijo}"))
     else:
-        keyboard_row.append(InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}"))
-    if page < total_pages:
-        keyboard_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}:{filtro}:{context_key}"))
+        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+
+    # Columna Central: Botón de cambio de vista
+    if filtro == "futuro":
+        paginacion_row.append(InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}"))
+    else:
+        paginacion_row.append(InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}"))
         
-    # 2. Acciones (Limpiar, Cancelar)
+    # Columna Derecha: Botón "Siguiente" o un placeholder
+    if page < total_pages:
+        paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}{callback_sufijo}"))
+    else:
+        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+        
+    keyboard_row.append(paginacion_row)
+
+    # Fila 2: Acciones (Limpiar, Cancelar)
+    acciones_row = []
     if filtro == "pasado" and context_key == "lista":
-        keyboard_row.append(InlineKeyboardButton("🧹", callback_data="limpiar_pasados_ask"))
+        acciones_row.append(InlineKeyboardButton("🧹 Limpiar", callback_data="limpiar_pasados_ask"))
     
     if mostrar_boton_cancelar:
-        keyboard_row.append(InlineKeyboardButton("❌", callback_data="list_cancel"))
+        acciones_row.append(InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel"))
         
-    # Empaquetamos la fila única en la estructura final
-    reply_markup = InlineKeyboardMarkup([keyboard_row]) if keyboard_row else None
+    if acciones_row:
+        keyboard_row.append(acciones_row)
+
+    reply_markup = InlineKeyboardMarkup(keyboard_row)
 
     if update.callback_query:
         await update.callback_query.answer()

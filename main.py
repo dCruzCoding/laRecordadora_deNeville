@@ -41,6 +41,7 @@ def run_telegram_bot():
     app.add_handler(lista.lista_handler)
     app.add_handler(lista.lista_shared_handler) # paginacion + pivot
     app.add_handler(lista.limpiar_pasados_handler)
+    app.add_handler(lista.placeholder_handler)
 
     app.add_handler(recordar.recordar_handler)
     app.add_handler(posponer.posponer_handler)
