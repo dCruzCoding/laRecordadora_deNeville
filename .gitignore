@@ -1,6 +1,28 @@
-ECHO está activado.
+# .gitignore
+
+# 1. Secretos y Variables de Entorno
+.env
+
+# 2. Entorno Virtual de Python
+venv_recordadora/
+
+# 3. Bases de Datos y Archivos de Estado Local
+# Excluye los archivos de estado del bot y del scheduler.
+*.db
+*.sqlite
+*.sqlite3
+
+# 4. Caché y Archivos Generados por Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 5. Carpetas de Proyecto Específicas
 Bitacora.docx
 testing/
-HowTo/ 
-venv_recordadora/ 
-.env
+HowTo/
+
+# 6. Archivos de IDEs (opcional pero recomendado)
+# Excluye carpetas de configuración de editores como VS Code.
+.vscode/
