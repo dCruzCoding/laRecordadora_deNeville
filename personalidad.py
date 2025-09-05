@@ -70,7 +70,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 2: Comandos Básicos (start, ayuda, lista)
+    # --- Flujo 2: Comandos Básicos (start, ayuda, lista)
     # -------------------------------------------------------------------------
     "start": [
         "👵 ¡Ay, criatura! Bienvenido de nuevo a tu Recordadora. Usa /ayuda si tu memoria de Doxy 🧚‍♀️ no da para más.",
@@ -99,7 +99,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 3: Creación de Recordatorios (/recordar)
+    # --- Flujo 3: Creación de Recordatorios (/recordar)
     # -------------------------------------------------------------------------
     "recordar_pide_fecha": [
         "👵📅 Venga, dime qué y para cuándo. Y no tardes. \n\nFormato: `fecha` `*` `texto`\nEj: `Mañana a las 14 * Clases de Herbología`",
@@ -113,7 +113,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
     
     # -------------------------------------------------------------------------
-    # --- FLujo 4: Edición de Recordatorios (/editar)
+    # --- Flujo 4: Edición de Recordatorios (/editar)
     # -------------------------------------------------------------------------
     "editar_elige_opcion": [
         "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{texto}_ ({fecha}).\n\n¿Qué quieres cambiarle, criatura?"
@@ -132,7 +132,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
     
     # -------------------------------------------------------------------------
-    # --- FLujo 5: Ajustes y Configuración (/ajustes)
+    # --- Flujo 5: Ajustes y Configuración (/ajustes)
     # -------------------------------------------------------------------------
     "ajustes_pide_nivel": [
         "👵 A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar?\n\nEl nivel de seguridad actual es *{nivel}*.",
@@ -162,7 +162,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 6: Notificaciones (Avisos y Resumen)
+    # --- Flujo 6: Notificaciones (Avisos y Resumen)
     # -------------------------------------------------------------------------
     "aviso_programado": [
         "🔔 Entendido. Te daré un grito {tiempo} antes. ¡Más te vale estar atento!",
@@ -186,7 +186,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
     
     # -------------------------------------------------------------------------
-    # --- FLujo 7: Operaciones y Confirmaciones
+    # --- Flujo 7: Operaciones y Confirmaciones
     # -------------------------------------------------------------------------
     "pregunta_confirmar_borrado": ["⚠️ ¿Seguro que quieres borrar {count} recordatorio(s)? Esto no se puede deshacer. Escribe 'SI' para confirmar."],
     "pregunta_confirmar_cambio": ["⚠️ ¿Seguro que quieres cambiar el estado de {count} recordatorio(s)? Escribe 'SI' para confirmar."],
@@ -195,7 +195,7 @@ TEXTOS: Dict[str, List[str]] = {
     "aviso_reprogramado": ["✅ ¡Venga, te he vuelto a poner el aviso para `#{id}`! ¡Que no se te pase!"],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 8: Errores y Casos Límite
+    # --- Flujo 8: Errores y Casos Límite
     # -------------------------------------------------------------------------
     "error_formato": ["❗ ¡Así no, criatura! El formato es `fecha` `*` `texto`. ¡Concéntrate!"],
     "error_no_id": ["⚠️ ¡Desastre! No he encontrado ningún recordatorio tuyo con esos números."],
@@ -217,7 +217,7 @@ TEXTOS: Dict[str, List[str]] = {
     ],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 9: Comandos de Administrador (/reset)
+    # --- Flujo 9: Comandos de Administrador (/reset)
     # -------------------------------------------------------------------------
     "reset_aviso": ["🔥🔥🔥 *¡ATENCIÓN!* 🔥🔥🔥\nEstás a punto de borrarlo *TODO*. Para confirmar, escribe: `CONFIRMAR`"],
     "reset_confirmado": ["🪄✨ ¡Hmph! Hecho. Todo borrado. Espero que sepas lo que has hecho."],
@@ -225,7 +225,7 @@ TEXTOS: Dict[str, List[str]] = {
     "reset_denegado": ["⛔ ¡Quieto ahí! Este es un comando de la abuela. ¡Tú no puedes usarlo!"],
 
     # -------------------------------------------------------------------------
-    # --- FLujo 10: Cancelación Genérica
+    # --- Flujo 10: Cancelación Genérica
     # -------------------------------------------------------------------------
     "cancelar": [
         "❌ ¡Hmph! Operación cancelada. Como siempre, dejando las cosas a medias.",

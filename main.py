@@ -12,10 +12,13 @@ Este script inicia y coordina los dos componentes principales del bot:
 # --- Importaciones de la Librería Estándar ---
 import threading
 import os
+import time
+import asyncio
 
 # --- Importaciones de Librerías de Terceros ---
 from flask import Flask
 from telegram.ext import ApplicationBuilder, CommandHandler
+import telegram.error
 
 # --- Importaciones de Módulos Locales ---
 from config import TOKEN
@@ -91,12 +94,23 @@ def run_telegram_bot():
 
     # 4. Inicio del bot.
     print("🤖 La Recordadora (bot de Telegram) está en marcha...")
-    try:
-        # app.run_polling() es un bucle infinito que escucha nuevas actualizaciones.
-        app.run_polling()
-    finally:
-        # Este bloque se ejecuta si el bot se detiene (ej: Ctrl+C), para un apagado limpio.
-        avisos.detener_scheduler()
+    while True:
+        try:
+            # En lugar de llamar directamente a run_polling, lo ejecutamos dentro de un
+            # bucle de eventos gestionado por asyncio.run().
+            asyncio.run(app.run_polling(poll_interval=1, timeout=30))
+        except telegram.error.NetworkError as e:
+            # Capturamos específicamente los errores de red.
+            print(f"🚨 ERROR DE RED: {e}")
+            print("💤 Esperando 30 segundos antes de intentar reconectar...")
+            time.sleep(30) # Damos un respiro antes de reconectar.
+            print("🚀 Reiniciando el bucle de polling...")
+        except Exception as e:
+            # Capturamos cualquier otro error inesperado para que no mate el bot.
+            print(f"🚨 ERROR INESPERADO: {e}")
+            print("💤 Esperando 60 segundos antes de reiniciar...")
+            time.sleep(60)
+            print("🚀 Reiniciando...")
 
 
 # =============================================================================
