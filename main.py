@@ -93,6 +93,8 @@ def run_telegram_bot():
     app.add_handler(help_reset.reset_handler)          # /reset (comando de admin)
 
     # 4. Inicio del bot.
+    print("⏳ Esperando 10 segundos para asegurar que la instancia antigua se ha detenido...") # <- Solución para despliegues superpuestos 
+    time.sleep(10) # Pausa de 10 segundos
     print("🤖 La Recordadora (bot de Telegram) está en marcha...")
     while True:
         try:
