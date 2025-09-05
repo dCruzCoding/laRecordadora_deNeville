@@ -188,8 +188,8 @@ async def pedir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     info = context.user_data.get("editar_info", {})
     chat_id = update.effective_chat.id
 
-    # --- ¡NUEVA LÓGICA DE VALIDACIÓN! ---
-    
+
+    # --- LÓGICA DE VALIDACIÓN ---
     # 1. Obtenemos el estado actual desde la base de datos para estar seguros.
     with get_connection() as conn:
         cursor = conn.cursor()

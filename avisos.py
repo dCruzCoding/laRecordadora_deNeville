@@ -10,9 +10,6 @@ Sus responsabilidades incluyen:
 """
 
 
-
-
-
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -22,9 +19,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import bot_state # Módulo de estado global para acceder a la instancia de la app
 from personalidad import get_text
-
-
-
 
 
 # --- CONFIGURACIÓN DEL SCHEDULER ---

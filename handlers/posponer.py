@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 import pytz
 
 from db import get_connection, get_config
-from avisos import cancelar_avisos, programar_avisos
+from avisos import cancelar_avisos, programar_avisos, scheduler, enviar_recordatorio
 
 
 # =============================================================================
@@ -63,35 +63,34 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
         await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{texto}_", parse_mode="Markdown")
 
     elif action == "posponer":
-        # Acción: Posponer. Se actualiza la fecha del recordatorio.
+        # Acción: Posponer. Se pospone el aviso 10min.
         minutos_posponer = int(parts[1])
-        fecha_hora_actual_utc = datetime.fromisoformat(fecha_hora_iso)
-        nueva_fecha_utc = fecha_hora_actual_utc + timedelta(minutes=minutos_posponer)
-        
-        with get_connection() as conn:
-            # Actualizamos la fecha en la DB. Mantenemos el aviso_previo original.
-            conn.execute("UPDATE recordatorios SET fecha_hora = ? WHERE id = ?", (nueva_fecha_utc.isoformat(), rid))
-            conn.commit()
-        
-        # Reprogramamos todos los avisos con la nueva fecha.
-        cancelar_avisos(rid)
-        await programar_avisos(
-            update.effective_chat.id, rid, user_id, texto, nueva_fecha_utc, 
-            aviso_previo_actual if aviso_previo_actual else 0
+        # Calculamos la nueva hora del aviso (ahora + los minutos a posponer).
+        nueva_hora_aviso_utc = datetime.now(pytz.utc) + timedelta(minutes=minutos_posponer)
+
+        #  Programamos un único job de tipo 'enviar_recordatorio' para la nueva hora.
+        scheduler.add_job(
+            enviar_recordatorio, # Reutilizamos la función del aviso principal
+            'date',
+            run_date=nueva_hora_aviso_utc,
+            # Le damos un ID único al job de snooze para evitar colisiones.
+            id=f"snooze_{rid}_{datetime.now().timestamp()}", 
+            args=[update.effective_chat.id, user_id, texto, rid],
+            misfire_grace_time=60
         )
 
-        # Confirmamos al usuario con la nueva hora en su zona horaria.
+        # Confirmamos al usuario con la hora del PRÓXIMO AVISO.
         user_tz_str = get_config(update.effective_chat.id, "user_timezone") or 'UTC'
         try:
             user_tz = pytz.timezone(user_tz_str)
         except pytz.UnknownTimeZoneError:
-            user_tz = pytz.utc # Fallback seguro
+            user_tz = pytz.utc
             
-        nueva_fecha_local = nueva_fecha_utc.astimezone(user_tz)
-        hora_local_str = nueva_fecha_local.strftime('%d %b, %H:%M')
+        nueva_hora_aviso_local = nueva_hora_aviso_utc.astimezone(user_tz)
+        hora_local_str = nueva_hora_aviso_local.strftime('%H:%M')
         
         await query.edit_message_text(
-            text=f"⏰ ¡De acuerdo! He pospuesto el recordatorio. Nueva hora: *{hora_local_str}*.\n\nTarea: _{texto}_",
+            text=f"⏰ ¡Entendido! Te lo volveré a recordar a las *{hora_local_str}*.\n\nLa tarea sigue programada para su hora original.",
             parse_mode="Markdown"
         )
 

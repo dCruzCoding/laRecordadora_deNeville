@@ -210,23 +210,36 @@ async def enviar_lista_interactiva(
 
     # --- LÓGICA PARA LISTAS VACÍAS ---
     if total_items == 0:
+        keyboard_rows = []
+        # El flag de cancelar se necesita para construir el callback_data
+        cancel_flag = "1" if mostrar_boton_cancelar else "0"
+
         if filtro == "futuro":
             mensaje = get_text("lista_vacia")
-            # Añadimos el context_key al callback_data
-            keyboard = [[InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            # Fila 1: Siempre ofrecemos cambiar a la otra vista.
+            keyboard_rows.append([
+                InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}")
+            ])
         else: # filtro == "pasado"
             mensaje = "🗂️ No tienes recordatorios PASADOS."
-            # Añadimos el context_key al callback_data
-            keyboard = [[InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
+            keyboard_rows.append([
+                InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}")
+            ])
+        
+        # Fila 2 (Opcional): Si estamos en un contexto que necesita cancelación, añadimos el botón.
+        if mostrar_boton_cancelar:
+            keyboard_rows.append([
+                InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel")
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard_rows)
         
         if update.callback_query:
             await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup)
         else:
             await update.message.reply_text(text=mensaje, reply_markup=reply_markup)
         return
-
+    
     total_pages = ceil(total_items / ITEMS_PER_PAGE)
     
     # Usamos los títulos del diccionario que nos pasan

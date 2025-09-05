@@ -3,7 +3,62 @@
 Este documento registra los cambios significativos, decisiones de diseño y problemas resueltos a lo largo del desarrollo y despliegue del bot.
 
 ---
-## [v1.5-edit-and-stability] - *En desarrollo*
+
+## [v1.6-assistant-upgrade] _(En desarrollo)_
+
+### ✨ Mejoras
+
+-   **Funcionalidad Proactiva -> Resumen Diario Personalizable:** La Recordadora ahora toma la iniciativa.
+    -   Cada mañana, envía un resumen con las tareas programadas para ese día, utilizando la zona horaria del usuario para ser precisa.
+    -   Esta funcionalidad es totalmente configurable desde un nuevo menú en `/ajustes`. Los usuarios pueden activar/desactivar el resumen y elegir la hora exacta en la que quieren recibirlo.
+    -   La programación es individual para cada usuario y se gestiona mediante eventos, siendo una solución muy eficiente.
+
+-   **Notificaciones Interactivas (Acciones Directas):** Los avisos (previos y principales) ya no son solo texto, ahora incluyen botones de acción rápida.
+    -   `✅ Hecho`: Marca el recordatorio como completado y cancela cualquier aviso futuro.
+    -   `⏰ +10 min`: Pospone el recordatorio. Esta acción no solo reprograma el aviso, sino que **actualiza la fecha y hora del recordatorio** en la base de datos.
+    -   `👌 OK`: Descarta la notificación y la marca como "vista", evitando que el aviso vuelva a aparecer en la lista de pendientes.
+    -   Los botones se muestran de forma inteligente (ej: no se puede posponer un aviso de menos de 10 minutos).
+
+-   **Interfaz de Listas Unificada y Reutilizable:** Se ha refactorizado por completo la forma en que se muestran las listas de recordatorios.
+    -   Los comandos `/borrar`, `/cambiar` y `/editar` ahora utilizan el mismo componente de lista interactiva que `/lista`, creando una experiencia de usuario 100% consistente.
+    -   Esta interfaz universal incluye **paginación** (`<<` y `>>`), la capacidad de **cambiar entre vistas** (Pendientes/Pasados) y **botones de acción contextuales** (`Limpiar`, `Cancelar`).
+    -   La posición de los botones de navegación se ha fijado para evitar que se muevan, mejorando la usabilidad.
+
+-   **Optimización y Refactorización Integral del Código:** Se ha realizado una revisión completa de todo el código base para mejorar su calidad, rendimiento y mantenibilidad.
+    -   **Optimización de Consultas SQL:** Se han eliminado bucles ineficientes en los handlers `/borrar` y `/cambiar`, reemplazándolos por consultas `... WHERE user_id IN (...)`, lo que reduce drásticamente las operaciones de base de datos.
+    -   **Mejora de la Estructura de Módulos:** Se ha refactorizado la lógica para una mejor separación de responsabilidades (ej: la gestión del resumen diario ahora está completamente encapsulada en su propio módulo).
+    -   **Se ha enriquecido la documentación** en todos los archivos con `docstrings` y comentarios explicativos para aclarar la arquitectura y las decisiones de diseño.
+    -   **Manejo de Secretos Profesional:** Se ha implementado el uso de archivos `.env` con `python-dotenv` para la gestión segura de credenciales en entornos locales.
+
+### 🐛 Problemas Resueltos
+
+-   **_E006_ - Lógica de Listas y Avisos:**
+    -   Solucionado un bug por el que los recordatorios marcados como 'Hecho' (`✅`) desaparecían incorrectamente de la vista de pendientes. Ahora permanecen visibles hasta que su fecha pasa.
+    -   Corregida la lógica para impedir que se pudieran programar avisos para una fecha/hora que ya había pasado. El bot ahora informa del error y permite al usuario reintentarlo, tanto en `/recordar` como en `/editar`.
+    -   Se ha solucionado un bug de "pérdida de estado" que hacía desaparecer el botón `❌ Cancelar` al cambiar de página o de vista en las listas.
+    -   Arreglado un fallo lógico que mostraba información de avisos para recordatorios que ya estaban en la lista de "Pasados".
+
+-   **_E007_ - Robustez de la Interfaz y Entradas de Usuario:**
+    -   Solucionados múltiples `AttributeError` (`'CallbackQuery' object has no attribute 'effective_chat'`) en varios handlers al obtener el `chat_id` de forma incorrecta.
+    -   La confirmación de `SI`/`NO` en los flujos de `/borrar`, `/cambiar` y `/ajustes` ahora es robusta y entiende acentos y mayúsculas (`Sí`, `si`, `NO`, etc.) gracias a una nueva función de normalización de texto.
+    -   Solucionado un `ValueError` en la construcción de teclados dinámicos cuando una de las filas de botones quedaba vacía.
+
+
+### 📝 Notas de Desarrollo y Seguridad
+
+-   **_S001 - Fuga de Credenciales en el Historial de Git_**
+    -   **Incidente:** Se detectó que, al hacer público el repositorio, las credenciales (`TELEGRAM_TOKEN` y `OWNER_ID`) eran visibles en los commits más antiguos del historial de Git.
+    -   **Acciones de Mitigación (Protocolo Estándar):**
+        1.  **Revocación Inmediata:** El `TELEGRAM_TOKEN` expuesto fue revocado inmediatamente a través de `@BotFather` para invalidarlo por completo, eliminando el riesgo principal.
+        2.  **Limpieza del Historial:** Se utilizó la herramienta `git-filter-repo` para reescribir toda la historia del repositorio. Este proceso recorrió cada commit y reemplazó las credenciales expuestas por placeholders genéricos (`***REDACTED***`).
+        3.  **Push Forzado:** El nuevo historial limpio fue subido a GitHub usando `git push --force`, sobreescribiendo la versión "sucia" de forma permanente.
+    -   **Resultado:** El repositorio es ahora 100% seguro y no contiene ninguna información sensible en su historial, manteniendo al mismo tiempo la integridad de los commits y los tags. Esta operación subraya la importancia de nunca incluir secretos directamente en el código fuente.
+
+
+
+
+
+## [v1.5-edit-and-stability] - 2025-08-30
 
 ### ✨ Mejoras
 -   **Nueva funcionalidad -> Comando `/editar`:** ¡Se ha añadido una nueva funcionalidad principal! Los usuarios ahora pueden modificar sus recordatorios existentes a través de un nuevo comando `/editar`.
@@ -21,29 +76,29 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 -   **_E005_**
     -   **Problema:** Si un usuario escribía un comando (ej: `/lista`) mientras estaba en medio de otra conversación (ej: `/ajustes`), el bot se comportaba de forma errática: a veces el comando se ejecutaba, otras veces era bloqueado por un mensaje de `fallback`, creando una experiencia inconsistente.
     -   **Solución:** Se ha implementado un mecanismo de protección utilizando los `fallbacks` de cada `ConversationHandler`. En muchos casos, si se detecta un comando inesperado, el bot informa al usuario de que está en mitad de un proceso y le instruye para que use `/cancelar` antes de continuar.
-    - **_📝 Notas de Desarrollo y Guía de Comportamientos Conocidos_**:
-        -   **Decisión Técnica:** Inicialmente se intentó forzar un comportamiento uniforme utilizando los **grupos de prioridad** de la librería `python-telegram-bot`. Sin embargo, se encontraron incompatibilidades o comportamientos inesperados con la versión utilizada. En lugar de explorar la compatibilidad entre versiones, se optó por la solución actual basada en `fallbacks` por ser más simple y estable.
-        -   **Causa Raíz:** La inconsistencia se debe a que los **puntos de entrada (`entry_point`) de un nuevo comando conversacional (ej: `/borrar`) tienen prioridad sobre el `fallback` genérico de una conversación ya activa (ej: `/editar`)**.
-        -   Se ha decidido aceptar este comportamiento como una **limitación conocida y documentada**. A continuación se explica cómo actuar en cada caso:
 
-        #### ❓ **¿Qué pasa si interrumpo una conversación? Guía Rápida:**
+### 📝 Notas de Desarrollo
+
+-   **_E005_ - Comportamiento Conocido de Interrupciones:**
+    -   **Decisión Técnica:** Se exploró el uso de **grupos de prioridad** para forzar un bloqueo total de interrupciones, pero se descartó por añadir una complejidad excesiva al código. La solución actual con `fallbacks` es más simple y cubre la mayoría de los casos.
+    -   **Causa Raíz:** La inconsistencia restante se debe a que los **puntos de entrada (`entry_point`) de un nuevo comando conversacional (ej: `/borrar`) tienen prioridad sobre el `fallback` genérico de una conversación ya activa (ej: `/editar`)**.
+    -   **Guía de Comportamiento:** Se ha aceptado este comportamiento como una limitación conocida y documentada. La siguiente guía rápida explica cómo responde el bot en cada escenario:
+
+        #### ❓ **¿Qué pasa si interrumpo una conversación?**
 
         *   **Caso A: El bot te bloquea con un mensaje ("¡Quieto ahí!")**
-            *   **Cuándo ocurre:** Generalmente, cuando estás en una conversación que espera texto (como `/recordar`) e intentas usar un comando simple (como `/lista`).
-            *   **Qué hacer:** El bot ha protegido tu progreso. Sigue las instrucciones: o continúas con la conversación actual, o usas `/cancelar` para empezar de nuevo.
+            *   **Cuándo:** Generalmente, al usar un comando simple (como `/lista`) durante una conversación que espera texto (como `/recordar`).
+            *   **Qué hacer:** Tu progreso está a salvo. Continúa la conversación o usa `/cancelar`.
 
-        *   **Caso B: El bot te deja abrir otra conversación (Ej: `/editar` y luego `/borrar`)**
-            *   **Cuándo ocurre:** Cuando estás en una conversación que espera texto (ej: `/editar`) e inicias *otra* conversación que también espera texto (ej: `/borrar`).
-            *   **Comportamiento:** La segunda conversación (`/borrar`) se pone "encima" de la primera. **La conversación que manda es la última que abriste**.
-            *   **Qué hacer:** Termina el flujo de la segunda conversación (`/borrar`). Una vez finalizada, el bot volverá automáticamente al punto exacto donde dejaste la primera (`/editar`), permitiéndote continuar.
+        *   **Caso B: El bot "anida" las conversaciones (Ej: `/editar` y luego `/borrar`)**
+            *   **Cuándo:** Al iniciar una conversación sobre otra que también espera texto.
+            *   **Comportamiento:** La conversación de `/borrar` se pone "encima". Al terminarla, volverás automáticamente al punto donde dejaste `/editar`.
+            *   **Qué hacer:** Termina la conversación más reciente para volver a la anterior.
 
-        *   **Caso C: Estás en una conversación de botones (Ej: `/ajustes`) y abres otra cosa**
-            *   **Cuándo ocurre:** Cuando el bot te muestra botones (como en `/ajustes`) y tú escribes un comando (como `/recordar` o `/lista`).
-            *   **Comportamiento:** El nuevo comando se ejecutará, abriendo su propia conversación o mostrándote su información. La conversación de `/ajustes` quedará "pausada" en segundo plano. El "foco" lo tiene la última acción que realizaste.
-            *   **Qué hacer:** Tienes control total para cambiar el foco. Puedes terminar la nueva conversación que abriste, o puedes volver a la conversación de `/ajustes` simplemente **pulsando uno de sus botones originales** que aún estén visibles en el chat.
-
-
-
+        *   **Caso C: Un comando se "cuela" (Ej: `/ajustes` y luego `/lista`)**
+            *   **Cuándo:** Al usar un comando de texto cuando el bot espera una pulsación de botón.
+            *   **Comportamiento:** El comando `/lista` se ejecutará. La conversación de `/ajustes` quedará "pausada" en segundo plano.
+            *   **Qué hacer:** Puedes volver a la conversación de `/ajustes` simplemente pulsando uno de sus botones originales.
 
 
 
@@ -88,7 +143,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 -   **UX de `/recordar` Refinada:** El bot ahora confirma que el recordatorio ha sido guardado *antes* de preguntar por el aviso previo, mejorando la sensación de seguridad del usuario.
 -   **Código DRY:** La función de cancelar conversaciones (`cancelar_conversacion`) se ha centralizado en `utils.py` para ser reutilizada por todos los handlers.
 
----
+
 
 ## [v1.2-render-multiuser] - 2025-08-20
 
@@ -104,7 +159,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
     -   **Síntoma:** `TypeError: function() takes 2 positional arguments but 3 were given`.
     -   **Solución:** Se refactorizaron los handlers para tener una función de procesamiento central (`_procesar_ids`) que unifica la lógica del modo seguro, garantizando un flujo de datos consistente.
 
----
+
 
 ## [v1.1-render] - 2025-08-18
 
@@ -125,7 +180,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 -   **Problema:** Render detenía el bot por no encontrar un puerto abierto.
     -   **Solución:** Se cambió el tipo de servicio a **`Web Service`** y se añadió Flask para abrir un puerto y pasar el chequeo de salud. *(Nota: La solución inicial de usar un "Background Worker" se descartó al descubrir que no estaba en el plan gratuito).*
 
----
+
 
 ## [v1.0-local] - (Fecha de Desarrollo Inicial)
 
