@@ -32,8 +32,8 @@ from avisos_resumen_diario import programar_resumen_diario_usuario, cancelar_res
 # SECCIÓN 1: PUNTO DE ENTRADA Y MENÚ PRINCIPAL
 # =============================================================================
 
-async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Inicia la conversación de /ajustes y muestra el menú principal."""
+def _build_main_menu() -> tuple[str, InlineKeyboardMarkup]:
+    """Crea el texto y el teclado para el menú principal de ajustes."""
     keyboard = [[
         InlineKeyboardButton("🛡️", callback_data="set_modo_seguro"),
         InlineKeyboardButton("🌍", callback_data="set_zona_horaria"),
@@ -41,25 +41,43 @@ async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         InlineKeyboardButton("❌", callback_data="ajustes_cancel")
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    # El texto incluye una pequeña leyenda para que los iconos sean comprensibles.
-    await update.message.reply_text(
+    
+    texto_menu = (
         "⚙️ Elige una opción:\n\n"
         "🛡️ Modo Seguro | 🌍 Zona Horaria\n"
-        "🗓️ Resumen Diario | ❌ Cerrar",
-        reply_markup=reply_markup
+        "🗓️ Resumen Diario | ❌ Cerrar"
     )
+    
+    return texto_menu, reply_markup
+
+async def ajustes_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Inicia la conversación de /ajustes y muestra el menú principal."""
+    # Obtenemos el texto y el teclado desde nuestra función centralizada.
+    texto_menu, reply_markup = _build_main_menu()
+    
+    await update.message.reply_text(text=texto_menu, reply_markup=reply_markup)
+    
     return MENU_PRINCIPAL
 
 async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Callback para los botones 'Volver'. Borra el submenú y muestra el menú principal de nuevo."""
+    """
+    Callback para los botones 'Volver'. Edita el mensaje del submenú para mostrar
+    el menú principal de nuevo, reutilizando el constructor de menú.
+    """
     query = update.callback_query
     await query.answer()
-    # Para evitar errores de "Message to edit not found", borramos el mensaje del
-    # submenú y enviamos uno nuevo con el menú principal. Es más robusto.
-    await query.delete_message()
-    return await ajustes_cmd(update, context)
+    
+    # Obtenemos el texto y el teclado desde nuestra función centralizada.
+    texto_menu, reply_markup = _build_main_menu()
+    
+    # Editamos el mensaje actual para mostrar el menú.
+    await query.edit_message_text(text=texto_menu, reply_markup=reply_markup)
+    
+    # Devolvemos el estado correcto al ConversationHandler.
+    return MENU_PRINCIPAL
 
-# Otra version de volver_menu_principal_ajustes que no borra el mensaje, sino que edita.
+
+### Otra version de volver_menu_principal_ajustes que no borra el mensaje, sino que edita.
 
 # async def volver_menu_principal_ajustes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 #     """Callback genérico para los botones 'Volver'. Vuelve al menú principal de /ajustes."""

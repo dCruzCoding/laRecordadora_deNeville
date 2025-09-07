@@ -86,19 +86,18 @@ def parsear_recordatorio(texto_entrada: str, user_timezone: str = 'UTC') -> Tupl
         # 'TIMEZONE': le dice a dateparser en qué zona horaria está pensando el usuario.
         'TIMEZONE': user_timezone,
         # 'RELATIVE_BASE': la fecha de referencia para términos como "mañana" o "en 2 horas".
-        'RELATIVE_BASE': datetime.now(user_tz_obj)
+        'RELATIVE_BASE': datetime.now(user_tz_obj),
+        # RETURN... True: Obliga a dateparser a devolver un objeto 'aware' en la TZ del usuario.
+        'RETURN_AS_TIMEZONE_AWARE': True
     }
     
     fechas = search_dates(parte_fecha, languages=['es'], settings=settings)
     
     if fechas:
-        # dateparser puede devolver fechas "naive" (ingenuas, sin zona horaria).
-        texto_fecha, fecha_naive = fechas[0]
-        # Nos aseguramos de que la fecha sea "aware" (consciente de la zona horaria) antes de hacer nada.
-        fecha_aware = user_tz_obj.localize(fecha_naive) if fecha_naive.tzinfo is None else fecha_naive
-        # Convertimos la fecha a UTC. Esta es la única zona horaria que guardamos en la DB para consistencia.
+        texto_fecha, fecha_procesada = fechas[0]
+        fecha_aware = user_tz_obj.localize(fecha_procesada) if fecha_procesada.tzinfo is None else fecha_procesada
         fecha_utc = fecha_aware.astimezone(pytz.utc)
-        
+
         texto_final = (limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()).strip()
         
         # Capitalizamos solo el primer carácter, respetando mayúsculas de nombres propios.

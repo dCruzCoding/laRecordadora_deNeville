@@ -59,9 +59,9 @@ def programar_resumen_diario_usuario(chat_id: int, hora_str: str, tz_str: str):
             timezone=tz_str, id=f'resumen_diario_{chat_id}', args=[chat_id],
             replace_existing=True
         )
-        print(f"🗓️ Resumen diario (re)programado para el usuario {chat_id} a las {hora_str} ({tz_str})")
+        print(f"🗓️  Resumen diario (re)programado para el usuario {chat_id} a las {hora_str} ({tz_str})")
     except Exception as e:
-        print(f"🚨 Error al programar el resumen para {chat_id}: {e}")
+        print(f"🚨  Error al programar el resumen para {chat_id}: {e}")
 
 def cancelar_resumen_diario_usuario(chat_id: int):
     """Cancela el job recurrente del resumen diario para un usuario."""

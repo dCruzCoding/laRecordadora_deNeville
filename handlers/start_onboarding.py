@@ -72,10 +72,12 @@ async def recibir_modo_seguro_onboarding(update: Update, context: ContextTypes.D
     """Paso 2: Guarda el Modo Seguro y pide el método para la Zona Horaria."""
     query = update.callback_query
     await query.answer()
+    # --- OBTENEMOS EL CHAT ID CORRECTAMENTE ---
+    chat_id = query.message.chat_id
 
     nivel_str = query.data.split(":")[1]
-    set_config(query.effective_chat.id, "modo_seguro", nivel_str)
-    
+    set_config(chat_id, "modo_seguro", nivel_str)
+
     descripcion_nivel = TEXTOS["niveles_modo_seguro"].get(nivel_str, "Desconocido")
     await query.edit_message_text(
         get_text("ajustes_confirmados", nivel=nivel_str, descripcion=descripcion_nivel),
@@ -87,7 +89,7 @@ async def recibir_modo_seguro_onboarding(update: Update, context: ContextTypes.D
         [InlineKeyboardButton("✍️ Manual (escribir ciudad)", callback_data="onboarding_tz_manual")],
     ]
     await context.bot.send_message(
-        chat_id=query.effective_chat.id,
+        chat_id=chat_id,
         text=get_text("onboarding_pide_zona_horaria"),
         reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"

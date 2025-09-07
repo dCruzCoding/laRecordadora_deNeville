@@ -14,6 +14,7 @@ import threading
 import os
 import time
 import asyncio
+from asyncio import CancelledError
 
 # --- Importaciones de Librerías de Terceros ---
 from flask import Flask
@@ -93,26 +94,13 @@ def run_telegram_bot():
     app.add_handler(help_reset.reset_handler)          # /reset (comando de admin)
 
     # 4. Inicio del bot.
-    print("⏳ Esperando 10 segundos para asegurar que la instancia antigua se ha detenido...") # <- Solución para despliegues superpuestos 
-    time.sleep(10) # Pausa de 10 segundos
+    print("⏳ Esperando 10 segundos para asegurar que la instancia antigua se ha detenido...")
+    time.sleep(10)
     print("🤖 La Recordadora (bot de Telegram) está en marcha...")
-    while True:
-        try:
-            # En lugar de llamar directamente a run_polling, lo ejecutamos dentro de un
-            # bucle de eventos gestionado por asyncio.run().
-            asyncio.run(app.run_polling(poll_interval=1, timeout=30))
-        except telegram.error.NetworkError as e:
-            # Capturamos específicamente los errores de red.
-            print(f"🚨 ERROR DE RED: {e}")
-            print("💤 Esperando 30 segundos antes de intentar reconectar...")
-            time.sleep(30) # Damos un respiro antes de reconectar.
-            print("🚀 Reiniciando el bucle de polling...")
-        except Exception as e:
-            # Capturamos cualquier otro error inesperado para que no mate el bot.
-            print(f"🚨 ERROR INESPERADO: {e}")
-            print("💤 Esperando 60 segundos antes de reiniciar...")
-            time.sleep(60)
-            print("🚀 Reiniciando...")
+    
+    # Ejecutamos el bot. La librería ya maneja el Ctrl+C internamente de forma limpia.
+    # No necesitamos un bucle while True ni un try/except aquí.
+    app.run_polling(poll_interval=1, timeout=30)
 
 
 # =============================================================================
@@ -124,11 +112,29 @@ if __name__ == "__main__":
     
     # Se crea un hilo para el servidor Flask.
     flask_thread = threading.Thread(target=run_flask)
-    # Se marca como 'daemon' para que se detenga automáticamente si el hilo principal (el bot) lo hace.
     flask_thread.daemon = True
-    
-    # Se inicia el servidor Flask en su propio hilo.
     flask_thread.start()
     
-    # Se ejecuta el bot de Telegram en el hilo principal.
-    run_telegram_bot()
+    # --- ESTRUCTURA DE CONTROL DE REINICIOS MEJORADA ---
+    while True:
+        try:
+            # Ejecutamos el bot de Telegram en el hilo principal.
+            run_telegram_bot()
+            # Si run_telegram_bot termina sin error (solo por Ctrl+C), salimos del bucle.
+            print("\n🛑 Apagado iniciado por el usuario (Ctrl+C).")
+            break
+            
+        except telegram.error.NetworkError as e:
+            # Este es el único error del que nos recuperamos automáticamente.
+            print(f"🚨 ERROR DE RED: {e}")
+            print("💤 Esperando 30 segundos antes de intentar reconectar...")
+            time.sleep(30)
+            
+        except Exception as e:
+            # Para cualquier otro error, lo mostramos y detenemos el bot.
+            # Esto es más seguro y evita bucles de reinicio por bugs.
+            print(f"🚨 ERROR FATAL INESPERADO: {e}")
+            print("🛑 El bot se detendrá. Revisa el error para solucionarlo.")
+            break # Salimos del bucle y terminamos el programa.
+
+    print("✅ Proceso finalizado.")

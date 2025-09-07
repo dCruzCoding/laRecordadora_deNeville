@@ -32,16 +32,28 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ### 🐛 Problemas Resueltos
 
--   **_E006_ - Lógica de Listas y Avisos:**
+-   **_E006_ - Lógica de listas y avisos:**
     -   Solucionado un bug por el que los recordatorios marcados como 'Hecho' (`✅`) desaparecían incorrectamente de la vista de pendientes. Ahora permanecen visibles hasta que su fecha pasa.
     -   Corregida la lógica para impedir que se pudieran programar avisos para una fecha/hora que ya había pasado. El bot ahora informa del error y permite al usuario reintentarlo, tanto en `/recordar` como en `/editar`.
     -   Se ha solucionado un bug de "pérdida de estado" que hacía desaparecer el botón `❌ Cancelar` al cambiar de página o de vista en las listas.
     -   Arreglado un fallo lógico que mostraba información de avisos para recordatorios que ya estaban en la lista de "Pasados".
 
--   **_E007_ - Robustez de la Interfaz y Entradas de Usuario:**
+-   **_E007_ - Robustez de la interfaz y intradas de usuario:**
     -   Solucionados múltiples `AttributeError` (`'CallbackQuery' object has no attribute 'effective_chat'`) en varios handlers al obtener el `chat_id` de forma incorrecta.
     -   La confirmación de `SI`/`NO` en los flujos de `/borrar`, `/cambiar` y `/ajustes` ahora es robusta y entiende acentos y mayúsculas (`Sí`, `si`, `NO`, etc.) gracias a una nueva función de normalización de texto.
     -   Solucionado un `ValueError` en la construcción de teclados dinámicos cuando una de las filas de botones quedaba vacía.
+
+-   **_E008_ - Flujo de bienvenida (`/start`):**
+    -   Corregido un error fatal (`AttributeError`) que rompía el proceso de configuración inicial justo después de que el nuevo usuario seleccionara su Modo Seguro. El problema ocurría porque el código intentaba obtener el `chat_id` con `query.effective_chat.id`, una propiedad que no existe en los objetos `CallbackQuery`. La solución fue cambiarlo por la forma correcta: `query.message.chat_id`, asegurando que el bot siempre sepa con qué usuario está hablando, incluso al pulsar botones.
+
+-   **_E009_ - Navegación y mantenibilidad en `/ajustes`:**
+    -   Solucionado un `AttributeError` crítico que rompía la funcionalidad del botón `<< Volver` en los submenús de `/ajustes`. El error se producía al intentar reutilizar la función del comando (`ajustes_cmd`), que esperaba un `update.message` que no existe en las respuestas de botones (`CallbackQuery`).
+    -   Para solucionarlo y mejorar el código, se refactorizó la lógica creando una función interna (`_build_main_menu`) dedicada exclusivamente a construir el menú principal. Esto elimina la duplicación de código, arregla el bug de navegación y permite una experiencia de usuario más fluida al editar el mensaje en lugar de borrarlo y reenviarlo.
+
+-   **_E010_ - Gestión del ciclo de vida y apagado local controlado (`Ctrl+C`):**
+    -   Solucionado un problema fundamental en el bucle principal que provocaba que la señal de interrupción (`Ctrl+C`) fuera incorrectamente capturada por la lógica de reinicio de errores, en lugar de terminar el programa limpiamente.
+    -   Se reestructuró la lógica de control del programa: el bucle de reinicio automático ahora reside en el punto de entrada principal (`if __name__ == "__main__"`) y **solo se activa ante errores de red (`NetworkError`)**, que son recuperables.
+    -   Cualquier otro error inesperado (`Exception`) ahora se considera **fatal**, deteniendo el bot para permitir una depuración segura y evitando bucles de reinicio infinitos causados por bugs en el código. Esta nueva arquitectura asegura que `Ctrl+C` termine el proceso de forma limpia y predecible al primer intento, mejorando drásticamente la robustez y la experiencia de desarrollo.
 
 
 ### 📝 Notas de Desarrollo y Seguridad
