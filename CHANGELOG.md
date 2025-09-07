@@ -32,28 +32,65 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ### 🐛 Problemas Resueltos
 
--   **_E006_ - Lógica de listas y avisos:**
-    -   Solucionado un bug por el que los recordatorios marcados como 'Hecho' (`✅`) desaparecían incorrectamente de la vista de pendientes. Ahora permanecen visibles hasta que su fecha pasa.
-    -   Corregida la lógica para impedir que se pudieran programar avisos para una fecha/hora que ya había pasado. El bot ahora informa del error y permite al usuario reintentarlo, tanto en `/recordar` como en `/editar`.
-    -   Se ha solucionado un bug de "pérdida de estado" que hacía desaparecer el botón `❌ Cancelar` al cambiar de página o de vista en las listas.
-    -   Arreglado un fallo lógico que mostraba información de avisos para recordatorios que ya estaban en la lista de "Pasados".
+¡Entendido! Me parece una excelente idea para mejorar la legibilidad y hacer que cada punto sea más fácil de referenciar.
 
--   **_E007_ - Robustez de la interfaz y intradas de usuario:**
-    -   Solucionados múltiples `AttributeError` (`'CallbackQuery' object has no attribute 'effective_chat'`) en varios handlers al obtener el `chat_id` de forma incorrecta.
-    -   La confirmación de `SI`/`NO` en los flujos de `/borrar`, `/cambiar` y `/ajustes` ahora es robusta y entiende acentos y mayúsculas (`Sí`, `si`, `NO`, etc.) gracias a una nueva función de normalización de texto.
-    -   Solucionado un `ValueError` en la construcción de teclados dinámicos cuando una de las filas de botones quedaba vacía.
+He reestructurado todo el changelog para incluir la numeración que has solicitado después de cada "Problema" y "Solución".
 
--   **_E008_ - Flujo de bienvenida (`/start`):**
-    -   Corregido un error fatal (`AttributeError`) que rompía el proceso de configuración inicial justo después de que el nuevo usuario seleccionara su Modo Seguro. El problema ocurría porque el código intentaba obtener el `chat_id` con `query.effective_chat.id`, una propiedad que no existe en los objetos `CallbackQuery`. La solución fue cambiarlo por la forma correcta: `query.message.chat_id`, asegurando que el bot siempre sepa con qué usuario está hablando, incluso al pulsar botones.
+Aquí tienes el resultado final:
 
--   **_E009_ - Navegación y mantenibilidad en `/ajustes`:**
-    -   Solucionado un `AttributeError` crítico que rompía la funcionalidad del botón `<< Volver` en los submenús de `/ajustes`. El error se producía al intentar reutilizar la función del comando (`ajustes_cmd`), que esperaba un `update.message` que no existe en las respuestas de botones (`CallbackQuery`).
-    -   Para solucionarlo y mejorar el código, se refactorizó la lógica creando una función interna (`_build_main_menu`) dedicada exclusivamente a construir el menú principal. Esto elimina la duplicación de código, arregla el bug de navegación y permite una experiencia de usuario más fluida al editar el mensaje en lugar de borrarlo y reenviarlo.
+---
 
--   **_E010_ - Gestión del ciclo de vida y apagado local controlado (`Ctrl+C`):**
-    -   Solucionado un problema fundamental en el bucle principal que provocaba que la señal de interrupción (`Ctrl+C`) fuera incorrectamente capturada por la lógica de reinicio de errores, en lugar de terminar el programa limpiamente.
-    -   Se reestructuró la lógica de control del programa: el bucle de reinicio automático ahora reside en el punto de entrada principal (`if __name__ == "__main__"`) y **solo se activa ante errores de red (`NetworkError`)**, que son recuperables.
-    -   Cualquier otro error inesperado (`Exception`) ahora se considera **fatal**, deteniendo el bot para permitir una depuración segura y evitando bucles de reinicio infinitos causados por bugs en el código. Esta nueva arquitectura asegura que `Ctrl+C` termine el proceso de forma limpia y predecible al primer intento, mejorando drásticamente la robustez y la experiencia de desarrollo.
+### 🐛 Problemas Resueltos
+
+-   **_E006_ - Correcciones en la lógica de listas y avisos**
+    -   **Problema (1):** Los recordatorios marcados como 'Hecho' (`✅`) desaparecían de la lista de pendientes antes de que su fecha expirara, lo cual resultaba confuso.
+    -   **Solución (1):** Se ha ajustado la consulta a la base de datos para que los recordatorios completados permanezcan en la vista de pendientes hasta que su fecha/hora haya pasado.
+
+    -   **Problema (2):** El bot permitía programar avisos para una fecha que ya estaba en el pasado, lo que no tenía sentido y no generaba ninguna notificación.
+    -   **Solución (2):** Se ha implementado una validación en los flujos de `/recordar` y `/editar` que comprueba si la hora del aviso es futura. Si no lo es, el bot informa al usuario y le permite introducir un nuevo valor.
+
+    -   **Problema (3):** Al navegar entre las páginas o al cambiar de la vista de "Pendientes" a "Pasados", el botón `❌ Cancelar` desaparecía en los contextos que lo requerían (como en `/borrar` o `/editar`).
+    -   **Solución (3):** Se ha corregido la gestión de estado en los `callback_data` de los botones de navegación para que la información sobre la visibilidad del botón "Cancelar" persista correctamente.
+
+    -   **Problema (4):** La lista de recordatorios "Pasados" mostraba información irrelevante sobre avisos previos que ya no iban a ocurrir.
+    -   **Solución (4):** Se ha añadido una comprobación en la función de formato de listas para que la línea del aviso (`🔔 Aviso a las...`) solo se muestre para recordatorios pendientes y futuros.
+
+-   **_E007_ - Mejoras en la robustez de la interfaz y entradas de usuario**
+    -   **Problema (1):** La aplicación se caía con un `AttributeError` al pulsar botones en varios menús, porque el código intentaba acceder al `chat_id` desde `query.effective_chat`, que no existe en las respuestas de botones.
+    -   **Solución (1):** Se ha estandarizado el acceso al identificador del chat en todos los `CallbackQueryHandlers` para que utilicen la forma correcta: `query.message.chat_id`.
+
+    -   **Problema (2):** Las confirmaciones que requerían escribir "SI" o "NO" eran sensibles a mayúsculas y acentos, forzando al usuario a escribirlo de una única manera.
+    -   **Solución (2):** Se ha implementado el uso de una función de normalización de texto para que el bot entienda de forma flexible distintas variaciones (`Sí`, `si`, `NO`, `no`, etc.).
+
+    -   **Problema (3):** El bot generaba un `ValueError` si, al construir un teclado dinámico, una de las filas de botones quedaba vacía.
+    -   **Solución (3):** Se ha añadido una comprobación para asegurar que solo las filas que contienen botones se añadan al `InlineKeyboardMarkup` final.
+
+-   **_E008_ - Reparación del flujo de bienvenida (`/start`)**
+    -   **Problema:** Un `AttributeError` fatal rompía el proceso de bienvenida para nuevos usuarios justo después de seleccionar el Modo Seguro, impidiendo completar la configuración.
+    -   **Solución:** Se ha corregido la obtención del `chat_id` en el `CallbackQueryHandler` correspondiente para que use `query.message.chat_id`, permitiendo que el flujo de 'onboarding' se complete sin errores.
+
+-   **_E009_ - Optimización de la navegación y mantenibilidad en `/ajustes`**
+    -   **Problema:** El botón `<< Volver` en los submenús de `/ajustes` no funcionaba y rompía la conversación debido a un `AttributeError`. Esto ocurría al reutilizar la función del comando, que esperaba una estructura de `update` diferente a la proporcionada por un botón.
+    -   **Solución:** Se ha refactorizado la lógica creando una función interna (`_build_main_menu`) dedicada a construir el menú principal. Esto elimina la duplicación de código, soluciona el error y mejora la experiencia de usuario al editar el mensaje en lugar de borrarlo y reenviarlo.
+
+-   **_E010_ - Gestión del ciclo de vida y apagado local controlado (`Ctrl+C`)**
+    -   **Problema:** Al ejecutar el bot en local, la señal de interrupción (`Ctrl+C`) era capturada incorrectamente por la lógica de reinicio de errores, impidiendo un apagado limpio.
+    -   **Solución:** Se ha reestructurado el bucle principal del programa. Ahora, solo los errores de red (`NetworkError`) activan un reinicio automático. Cualquier otro `Exception` o `Ctrl+C` detiene el bot de forma predecible, mejorando la robustez y la experiencia de desarrollo.
+
+-   **_E011_ - Mejoras en la funcionalidad para posponer avisos**
+    -   **Problema:** Un aviso solo se podía posponer una vez, ya que la notificación resultante no incluía de nuevo el botón para posponer. Además, la nueva hora del aviso no se reflejaba en `/lista`.
+    -   **Solución:** Se ha modificado la lógica para que los avisos pospuestos generen una notificación que también incluye el botón de posponer, permitiendo un bucle continuo. Adicionalmente, el campo `aviso_previo` ahora se recalcula y se **actualiza en la base de datos** con cada posposición, asegurando que `/lista` siempre muestre la hora del próximo aviso de forma precisa.
+
+-   **_E012_ - Corrección de precisión en el cálculo de tiempos**
+    -   **Problema:** Se producía un desajuste de un minuto al posponer avisos debido a un error de cálculo al convertir los segundos restantes a minutos, que truncaba los decimales (`int()`).
+    -   **Solución:** Se ha sustituido el truncamiento por un redondeo (`round()`). Este ajuste garantiza la máxima precisión y elimina cualquier inconsistencia entre la hora notificada al usuario y la mostrada en `/lista`.
+
+
+
+
+
+
+
 
 
 ### 📝 Notas de Desarrollo y Seguridad

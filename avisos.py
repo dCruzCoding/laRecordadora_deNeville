@@ -19,6 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 import bot_state # Módulo de estado global para acceder a la instancia de la app
 from personalidad import get_text
+from db import get_connection
 
 
 # --- CONFIGURACIÓN DEL SCHEDULER ---
@@ -57,7 +58,7 @@ def detener_scheduler():
 # GESTIÓN DE RECORDATORIOS INDIVIDUALES
 # =============================================================================
 
-async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fecha: datetime, aviso_previo_min: int) -> bool:
+async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fecha: datetime, aviso_previo_min: int, es_pospuesto: bool = False) -> bool:
     """
     Programa el aviso principal y, si corresponde, el aviso previo para un recordatorio.
 
@@ -79,7 +80,9 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
         enviar_recordatorio, 'date', run_date=fecha, id=f"recordatorio_{rid}",
         args=[chat_id, user_id, texto, rid], misfire_grace_time=60, replace_existing=True
     )
-    print(f"✅ Recordatorio programado: '{rid}' para las {fecha.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
+    
+    if not es_pospuesto:
+        print(f"✅ Recordatorio programado: '{rid}' para las {fecha.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
 
     # 2. Programar el aviso previo (si aplica y es en el futuro)
     if aviso_previo_min > 0:
@@ -92,7 +95,10 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
             )
             horas, mins = divmod(aviso_previo_min, 60)
             tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-            print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
+            if es_pospuesto:
+                print(f"🔔 Aviso previo REPROGRAMADO: '{rid}' para {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
+            else:
+                print(f"  🔔└─ Aviso previo: {tiempo_str} antes, a las {aviso_time.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
             aviso_previo_programado = True
         else:
             print(f"  ❌└─ Aviso previo para '{rid}' omitido porque su hora ya ha pasado.")
@@ -103,6 +109,11 @@ async def programar_avisos(chat_id: int, rid: str, user_id: int, texto: str, fec
 async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
     """Función ejecutada por el scheduler para enviar la notificación principal."""
     if bot_state.telegram_app:
+        # --- CAMBIO: Limpiamos el aviso_previo al llegar la hora final ---
+        with get_connection() as conn:
+            conn.execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = ?", (rid,))
+            conn.commit()
+
         mensaje = get_text("aviso_principal", id=user_id, texto=texto)
         keyboard = [[
             InlineKeyboardButton("👌 OK", callback_data=f"ok:{rid}"),
@@ -127,7 +138,7 @@ async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: i
         
         # El botón de posponer solo se muestra si el aviso es de más de 10 minutos
         if minutos > 10:
-            keyboard_buttons.insert(1, InlineKeyboardButton("⏰ +10 min", callback_data=f"posponer:10:{rid}"))
+            keyboard_buttons.insert(1, InlineKeyboardButton("⏰ +10 min", callback_data=f"posponer:2:{rid}"))
 
         reply_markup = InlineKeyboardMarkup([keyboard_buttons])
         await bot_state.telegram_app.bot.send_message(
