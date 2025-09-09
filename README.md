@@ -1,4 +1,5 @@
 # La Recordadora de Neville 👵
+(Pendiente de actualización)
 
 > ¡Ay, criatura! Que no se te olvide nada. Haz como Neville y usa la Recordadora para ayudarte con todas esas cosillas importantes de la vida, ya sea desde tu ordenador o desde la nube.
 
