@@ -1,38 +1,72 @@
-import re
-import pytz
-from datetime import datetime
-from dateparser.search import search_dates
-from personalidad import get_text
-from db import get_config
-from telegram import Update, ReplyKeyboardRemove
-from telegram.ext import (
-    ContextTypes,
-    ConversationHandler
-)
+# utils.py
+"""
+Módulo de Utilidades Generales.
 
-def normalizar_hora(texto):
+Este archivo contiene funciones de ayuda transversales que son utilizadas por
+múltiples handlers para realizar tareas comunes, como:
+- Parseo de texto de entrada (fechas, tiempos).
+- Formateo de datos para la presentación al usuario.
+- Lógica reutilizable de la interfaz de usuario (ej: listas interactivas).
+- Funciones genéricas para la gestión de conversaciones.
+"""
+
+import re
+from math import ceil
+from datetime import datetime, timedelta
+from typing import Tuple, List, Optional
+import unicodedata
+
+import pytz
+from dateparser.search import search_dates
+from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, ConversationHandler
+
+from db import get_config, get_recordatorios
+from personalidad import get_text
+
+# --- CONSTANTES ---
+ITEMS_PER_PAGE = 10  # Nº de recordatorios a mostrar por página en las listas interactivas.
+
+
+# =============================================================================
+# SECCIÓN 1: PARSEO Y PROCESAMIENTO DE TEXTO DE ENTRADA
+# =============================================================================
+
+def normalizar_texto(texto: str) -> str:
     """
-    Añade ':00' a las horas en punto para ayudar a dateparser.
-    Ej: "a las 11" -> "a las 11:00"
+    Elimina acentos y convierte a minúsculas para comparaciones robustas.
+    Ej: "¡Sí, claro!" -> "si, claro!"
     """
+    # NFC -> descompone caracteres como 'á' en 'a' + '´'
+    # Luego filtramos para quedarnos solo con los caracteres base (no diacríticos)
+    texto_sin_acentos = ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
+    return texto_sin_acentos.lower()
+
+def normalizar_hora(texto: str) -> str:
+    """Añade ':00' a las horas en punto para ayudar a dateparser (ej: "a las 11" -> "a las 11:00")."""
     patron = r'(a las|a la) (\d{1,2})(?![:\d])'
     return re.sub(patron, r'\1 \2:00', texto)
 
-def limpiar_texto_sin_fecha(texto, texto_fecha):
+def limpiar_texto_sin_fecha(texto: str, texto_fecha: str) -> str:
+    """Elimina la parte del texto que ha sido identificada como una fecha."""
     patron = re.escape(texto_fecha)
     resultado = re.search(patron, texto, re.IGNORECASE)
     if resultado:
         start, end = resultado.span()
         texto_limpio = texto[:start] + texto[end:]
-        texto_limpio = re.sub(r'\s+', ' ', texto_limpio).strip()
-        return texto_limpio
-    else:
-        return texto
+        return re.sub(r'\s+', ' ', texto_limpio).strip()
+    return texto
 
-def parsear_recordatorio(texto_entrada, user_timezone='UTC'):
+def parsear_recordatorio(texto_entrada: str, user_timezone: str = 'UTC') -> Tuple[Optional[str], Optional[datetime], Optional[str]]:
     """
     Parsea una cadena de texto para extraer un recordatorio y una fecha.
-    La fecha devuelta siempre estará en formato UTC.
+    
+    Returns:
+        Una tupla con (texto_formateado, fecha_utc, mensaje_de_error).
+        Si tiene éxito, el mensaje de error es None.
     """
     if "*" not in texto_entrada:
         return None, None, get_text("error_formato")
@@ -42,34 +76,33 @@ def parsear_recordatorio(texto_entrada, user_timezone='UTC'):
     
     try:
         user_tz_obj = pytz.timezone(user_timezone)
-        now_in_user_timezone = datetime.now(user_tz_obj)
     except pytz.UnknownTimeZoneError:
         user_tz_obj = pytz.utc
-        now_in_user_timezone = datetime.now(user_tz_obj)
-
-    # Configuración esencial para dateparser
+    
+    # Configuramos dateparser para que entienda el contexto del usuario.
     settings = {
+        # 'future': prefiere fechas futuras (ej: "sábado" será el próximo sábado, no el pasado).
         'PREFER_DATES_FROM': 'future',
+        # 'TIMEZONE': le dice a dateparser en qué zona horaria está pensando el usuario.
         'TIMEZONE': user_timezone,
-        'RELATIVE_BASE': now_in_user_timezone
+        # 'RELATIVE_BASE': la fecha de referencia para términos como "mañana" o "en 2 horas".
+        'RELATIVE_BASE': datetime.now(user_tz_obj),
+        # RETURN... True: Obliga a dateparser a devolver un objeto 'aware' en la TZ del usuario.
+        'RETURN_AS_TIMEZONE_AWARE': True
     }
     
     fechas = search_dates(parte_fecha, languages=['es'], settings=settings)
     
     if fechas:
-        texto_fecha, fecha_naive = fechas[0]
-        
-        # Forzamos la fecha a ser "consciente" con la zona horaria del usuario
-        fecha_aware = user_tz_obj.localize(fecha_naive) if fecha_naive.tzinfo is None else fecha_naive
-        
-        # La convertimos a UTC para el almacenamiento y la programación
+        texto_fecha, fecha_procesada = fechas[0]
+        fecha_aware = user_tz_obj.localize(fecha_procesada) if fecha_procesada.tzinfo is None else fecha_procesada
         fecha_utc = fecha_aware.astimezone(pytz.utc)
+
+        texto_final = (limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()).strip()
         
-        texto = limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()
-        if texto:
-            # Creamos el nuevo texto cogiendo el primer carácter, poniéndolo en mayúscula,
-            # y luego concatenando el RESTO de la cadena (desde el segundo carácter hasta el final).
-            texto_formateado = texto[0].upper() + texto[1:]
+        # Capitalizamos solo el primer carácter, respetando mayúsculas de nombres propios.
+        if texto_final:
+            texto_formateado = texto_final[0].upper() + texto_final[1:]
         else:
             texto_formateado = ""
 
@@ -77,120 +110,219 @@ def parsear_recordatorio(texto_entrada, user_timezone='UTC'):
     else:
         return None, None, get_text("error_formato")
 
-def formatear_fecha_para_mensaje(fecha_iso):
+def parsear_tiempo_a_minutos(valor: str) -> Optional[int]:
+    """Convierte cadenas de tiempo (ej: '2h', '1d', '30m') a minutos."""
+    valor = valor.lower().strip()
+    if valor == "0":
+        return 0
+    try:
+        if valor.endswith("h"): return int(valor[:-1]) * 60
+        elif valor.endswith("d"): return int(valor[:-1]) * 1440
+        elif valor.endswith("m"): return int(valor[:-1])
+    except (ValueError, TypeError):
+        return None
+    return None
+
+
+# =============================================================================
+# SECCIÓN 2: FORMATEO DE DATOS PARA PRESENTACIÓN
+# =============================================================================
+
+def formatear_fecha_para_mensaje(fecha_iso: Optional[str]) -> str:
+    """Formatea una fecha en formato ISO para ser legible por el usuario."""
     if not fecha_iso:
         return "Sin fecha específica"
     fecha = datetime.fromisoformat(fecha_iso)
+    # Si la hora es medianoche, se asume que es "todo el día" y no se muestra la hora.
     if fecha.hour == 0 and fecha.minute == 0 and fecha.second == 0:
         return fecha.strftime("%d %b %Y")
     else:
         return fecha.strftime("%d %b %Y, %H:%M")
-    
-    
+
 def convertir_utc_a_local(fecha_utc: datetime, user_timezone_str: str) -> datetime:
-    """Convierte una fecha UTC a la zona horaria local del usuario."""
+    """Convierte un objeto datetime de UTC a la zona horaria local del usuario."""
     if not fecha_utc or not user_timezone_str:
         return fecha_utc
     try:
         user_timezone = pytz.timezone(user_timezone_str)
         return fecha_utc.astimezone(user_timezone)
     except pytz.UnknownTimeZoneError:
-        return fecha_utc # Si la zona horaria es inválida, devuelve UTC
-
-
-def parsear_tiempo_a_minutos(valor: str):
-    """Convierte 2h, 1d, 30m o 0 a minutos."""
-    if valor == "0":
-        return 0
-    try:
-        if valor.endswith("h"):
-            return int(valor[:-1]) * 60
-        elif valor.endswith("d"):
-            return int(valor[:-1]) * 1440
-        elif valor.endswith("m"):
-            return int(valor[:-1])
-    except ValueError:
-        return None
-    return None
+        return fecha_utc # Devuelve UTC como fallback seguro.
 
 def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
-    """Función privada ayudante. Formatea UNA SOLA línea."""
-    _, user_id, _, texto, fecha_iso, estado, _, timezone_recordatorio = recordatorio
-       
-    fecha_str = "Sin fecha"
+    """Formatea una única línea de la lista de recordatorios, incluyendo la info del aviso."""
+    _, user_id, _, texto, fecha_iso, estado, aviso_previo, timezone_recordatorio = recordatorio
+    lineas = []
+    fecha_local = None
 
     if fecha_iso:
         fecha_utc = datetime.fromisoformat(fecha_iso)
+        # Usa la zona horaria específica del recordatorio si existe, si no, la global del usuario.
         tz_para_mostrar = timezone_recordatorio or user_tz_global
         fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
+    else:
+        fecha_str = "Sin fecha"
+    
+    prefijo = "✅" if estado == 1 else "⬜️"
+    lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
+    
+    now_aware = datetime.now(pytz.timezone(user_tz_global))
 
-    prefijo = "✅ " if estado == 1 else "⬜️ "
-    return f"{prefijo}`#{user_id}` - {texto} ({fecha_str})"
+    # El aviso solo se muestra si el recordatorio está pendiente, tiene fecha futura y un aviso programado.
+    if estado == 0 and fecha_local and fecha_local > now_aware and aviso_previo and aviso_previo > 0:
+        fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
+        lineas.append(f"  └─ 🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}")
+        
+    return "\n".join(lineas)
 
-
-def construir_mensaje_lista_completa(chat_id: int, recordatorios: list, titulo_general: str = None) -> str:
+def construir_mensaje_lista_completa(chat_id: int, recordatorios: List) -> str:
     """
-    Función universal. Toma una lista de recordatorios y devuelve el mensaje
-    completo, clasificado en Futuros y Pasados.
+    Toma una lista de recordatorios y la convierte en un único bloque de texto.
+    Cada recordatorio se formatea individualmente.
     """
     if not recordatorios:
-        return get_text("lista_vacia") # Usamos la personalidad para el mensaje de lista vacía
+        # La función que llama a esta debe manejar los títulos.
+        # Esta solo devuelve el mensaje de "lista vacía" si no hay nada que formatear.
+        return get_text("lista_vacia")
 
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
-    now_aware = datetime.now(pytz.timezone(user_tz))
+    # Usa una "list comprehension" para aplicar el formateo a cada recordatorio de la lista.
+    lineas = [_formatear_linea_individual(chat_id, r, user_tz) for r in recordatorios]
+    return "\n".join(lineas)
 
-    futuros_y_sin_fecha = []
-    pasados = []
 
-    for r in recordatorios:
-        fecha_iso, timezone_r = r[4], r[7]
-        if fecha_iso:
-            fecha_utc = datetime.fromisoformat(fecha_iso)
-            tz_para_comparar = timezone_r or user_tz
-            fecha_local = convertir_utc_a_local(fecha_utc, tz_para_comparar)
-            if fecha_local < now_aware:
-                pasados.append(r)
-            else:
-                futuros_y_sin_fecha.append(r)
-        else:
-            futuros_y_sin_fecha.append(r)
+# =============================================================================
+# SECCIÓN 3: COMPONENTES DE UI REUTILIZABLES
+# =============================================================================
 
-    mensaje_partes = []
-    if titulo_general:
-        mensaje_partes.append(f"*{titulo_general}*")
+async def enviar_lista_interactiva(
+    update: Update, context: ContextTypes.DEFAULT_TYPE, context_key: str,
+    titulos: dict, page: int = 1, filtro: str = "futuro",
+    mostrar_boton_cancelar: bool = False
+):
+    """
+    Función universal para generar y enviar una lista interactiva paginada.
+    """
+    chat_id = update.effective_chat.id
+    recordatorios_pagina, total_items = get_recordatorios(chat_id, filtro=filtro, page=page, items_per_page=ITEMS_PER_PAGE)
 
-    if futuros_y_sin_fecha:
-        lineas_futuras = [_formatear_linea_individual(chat_id, r, user_tz) for r in futuros_y_sin_fecha]
-        mensaje_partes.append("\n".join(lineas_futuras))
+    # --- LÓGICA PARA LISTAS VACÍAS ---
+    if total_items == 0:
+        keyboard_rows = []
+        # El flag de cancelar se necesita para construir el callback_data
+        cancel_flag = "1" if mostrar_boton_cancelar else "0"
 
-    if pasados:
-        mensaje_partes.append("\n--- *Pasados* ---\n")
-        lineas_pasadas = [_formatear_linea_individual(chat_id, r, user_tz) for r in pasados]
-        mensaje_partes.append("\n".join(lineas_pasadas))
+        if filtro == "futuro":
+            mensaje = get_text("lista_vacia")
+            # Fila 1: Siempre ofrecemos cambiar a la otra vista.
+            keyboard_rows.append([
+                InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}")
+            ])
+        else: # filtro == "pasado"
+            mensaje = "🗂️ No tienes recordatorios PASADOS."
+            keyboard_rows.append([
+                InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}")
+            ])
         
-    return "\n".join(mensaje_partes)
+        # Fila 2 (Opcional): Si estamos en un contexto que necesita cancelación, añadimos el botón.
+        if mostrar_boton_cancelar:
+            keyboard_rows.append([
+                InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel")
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard_rows)
+        
+        if update.callback_query:
+            await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup)
+        else:
+            await update.message.reply_text(text=mensaje, reply_markup=reply_markup)
+        return
+    
+    total_pages = ceil(total_items / ITEMS_PER_PAGE)
+    
+    # Usamos los títulos del diccionario que nos pasan
+    titulo = titulos[filtro] # Accedemos al título de 'futuro' o 'pasado'
+    if total_pages > 1:
+        titulo += f" (Pág. {page}/{total_pages})"
+    titulo += "\n\n"
+        
+    cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
+    mensaje_final = titulo + cuerpo_lista
+    
+    # --- BOTONES FIJOS ---
+
+    # Creamos un "sufijo" para el callback_data que llevará toda la información de estado.
+    # El '1' o '0' al final representa el estado de mostrar_boton_cancelar.
+    cancel_flag = "1" if mostrar_boton_cancelar else "0"
+    callback_sufijo = f":{filtro}:{context_key}:{cancel_flag}"
+
+    keyboard_row = []
+    paginacion_row = []
+    
+    # Columna Izquierda: Botón "Anterior" o un placeholder
+    if page > 1:
+        paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}{callback_sufijo}"))
+    else:
+        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+
+    # Columna Central: Botón de cambio de vista
+    if filtro == "futuro":
+        paginacion_row.append(InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}"))
+    else:
+        paginacion_row.append(InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}"))
+        
+    # Columna Derecha: Botón "Siguiente" o un placeholder
+    if page < total_pages:
+        paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}{callback_sufijo}"))
+    else:
+        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+        
+    keyboard_row.append(paginacion_row)
+
+    # Fila 2: Acciones (Limpiar, Cancelar)
+    acciones_row = []
+    if filtro == "pasado" and context_key == "lista":
+        acciones_row.append(InlineKeyboardButton("🧹 Limpiar", callback_data="limpiar_pasados_ask"))
+    
+    if mostrar_boton_cancelar:
+        acciones_row.append(InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel"))
+        
+    if acciones_row:
+        keyboard_row.append(acciones_row)
+
+    reply_markup = InlineKeyboardMarkup(keyboard_row)
+
+    # El bot es lo suficientemente inteligente para saber si debe editar un mensaje
+    # existente (si la acción vino de un botón) o enviar uno nuevo.
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+
+
+
+# =============================================================================
+# SECCIÓN 4: GESTIÓN DE CONVERSACIONES
+# =============================================================================
 
 async def cancelar_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Función genérica para el fallback de /cancelar.
-    Limpia datos, teclado y envía un mensaje de confirmación.
-    """
-    # Limpiamos los datos de la conversación por si acaso
+    """Función de fallback para el COMANDO /cancelar."""
     if context.user_data:
         context.user_data.clear()
-        
-    await update.message.reply_text(
-        text=get_text("cancelar"),
-        reply_markup=ReplyKeyboardRemove()
-    )
-    
+    await update.message.reply_text(text=get_text("cancelar"), reply_markup=ReplyKeyboardRemove())
+    return ConversationHandler.END
+
+async def cancelar_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Función de fallback para el BOTÓN [X] de cancelar."""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(text=get_text("cancelar"))
+    if context.user_data:
+        context.user_data.clear()
     return ConversationHandler.END
 
 async def comando_inesperado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """
-    Se activa si se recibe un comando inesperado.
-    Le recuerda al usuario que debe usar /cancelar.
-    NO termina la conversación.
-    """
+    """Fallback para comandos inesperados durante una conversación."""
     await update.message.reply_text(get_text("error_interrupcion"))

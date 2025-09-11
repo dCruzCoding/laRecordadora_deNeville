@@ -1,110 +1,100 @@
-from telegram import (
-    Update,
-    KeyboardButton, 
-    ReplyKeyboardMarkup, 
-    ReplyKeyboardRemove, 
-    InlineKeyboardButton, 
-    InlineKeyboardMarkup
-)
-from telegram.ext import (
-    ContextTypes, 
-    ConversationHandler, 
-    CommandHandler, 
-    MessageHandler, 
-    filters,
-    CallbackQueryHandler
-)
-from db import get_config, set_config
-from personalidad import get_text, TEXTOS
+# handlers/start_onboarding.py
+"""
+Módulo para la bienvenida de nuevos usuarios (/start) y el comando /info.
+
+Contiene un ConversationHandler que guía a los nuevos usuarios a través de
+un proceso de onboarding, configurando sus preferencias iniciales (Modo Seguro,
+Zona Horaria, Resumen Diario).
+También proporciona el comando /info para que los usuarios recurrentes puedan
+revisar las instrucciones de uso.
+"""
+
+from telegram import Update, KeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
-from utils import cancelar_conversacion, comando_inesperado
 
-# Estados para la nueva conversación de bienvenida
-ONBOARDING_ELIGE_MODO_SEGURO, \
-ONBOARDING_PIDE_METODO_TZ, \
-ONBOARDING_PIDE_UBICACION, \
-ONBOARDING_PIDE_CIUDAD, \
-ONBOARDING_CONFIRMAR_CIUDAD = range(5)
+from db import get_config, set_config
+from personalidad import get_text, TEXTOS
+from utils import cancelar_conversacion, comando_inesperado, normalizar_texto
+from avisos_resumen_diario import programar_resumen_diario_usuario
 
-# --- COMANDO /INFO ---
+# --- DEFINICIÓN DE ESTADOS ---
+(
+    ONBOARDING_ELIGE_MODO_SEGURO, ONBOARDING_PIDE_METODO_TZ,
+    ONBOARDING_PIDE_UBICACION, ONBOARDING_PIDE_CIUDAD,
+    ONBOARDING_CONFIRMAR_CIUDAD
+) = range(5)
+
+
+# =============================================================================
+# COMANDO INDEPENDIENTE /info
+# =============================================================================
+
 async def info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Muestra de nuevo la guía de uso de La Recordadora."""
     await update.message.reply_text(get_text("onboarding_informacion"), parse_mode="Markdown")
 
 
-# --- NUEVA CONVERSACIÓN /START ---
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Inicia la conversación de bienvenida si es la primera vez."""
-    chat_id = update.effective_chat.id
-    onboarding_completo = get_config(chat_id, "onboarding_completo")
+# =============================================================================
+# LÓGICA DE LA CONVERSACIÓN DE ONBOARDING (/start)
+# =============================================================================
 
-    if onboarding_completo:
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Punto de entrada de la conversación.
+    Si es un usuario nuevo, inicia el onboarding. Si no, envía un saludo.
+    """
+    chat_id = update.effective_chat.id
+    if get_config(chat_id, "onboarding_completo"):
         await update.message.reply_text(get_text("start"))
         return ConversationHandler.END
 
-    # --- INICIO DEL ONBOARDING ---
-    # 1. Presentación de Augusta
+    # --- INICIO DEL FLUJO DE ONBOARDING ---
     await update.message.reply_text(get_text("onboarding_presentacion"), parse_mode="Markdown")
-    
-    # 2. Guía de uso (la misma que en /informacion)
     await update.message.reply_text(get_text("onboarding_informacion"), parse_mode="Markdown")
 
-    # 3. Pedimos la primera configuración: Modo Seguro
-    mensaje_modo_seguro = get_text("onboarding_pide_modo_seguro", nivel='0')
+    # Pedimos la primera configuración: Modo Seguro
     keyboard = [
-        [InlineKeyboardButton("🔓 Nivel 0 (Sin confirmaciones)", callback_data="onboarding_nivel_seguro:0")],
-        [InlineKeyboardButton("🗑️ Nivel 1 (Confirmar borrado)", callback_data="onboarding_nivel_seguro:1")],
-        [InlineKeyboardButton("🔄 Nivel 2 (Confirmar cambio)", callback_data="onboarding_nivel_seguro:2")],
-        [InlineKeyboardButton("🔒 Nivel 3 (Confirmar ambos)", callback_data="onboarding_nivel_seguro:3")],
+        [InlineKeyboardButton("🔓 Nivel 0", callback_data="onboarding_nivel_seguro:0"),
+         InlineKeyboardButton("🗑️ Nivel 1", callback_data="onboarding_nivel_seguro:1")],
+        [InlineKeyboardButton("🔄 Nivel 2", callback_data="onboarding_nivel_seguro:2"),
+         InlineKeyboardButton("🔒 Nivel 3", callback_data="onboarding_nivel_seguro:3")],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(mensaje_modo_seguro, parse_mode="Markdown", reply_markup=reply_markup)
+    await update.message.reply_text(
+        get_text("onboarding_pide_modo_seguro", nivel='0 (por defecto)'),
+        parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard)
+    )
     return ONBOARDING_ELIGE_MODO_SEGURO
 
-async def recibir_modo_seguro_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Recibe la pulsación del botón del modo seguro durante el onboarding."""
+
+async def recibir_modo_seguro_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Paso 2: Guarda el Modo Seguro y pide el método para la Zona Horaria."""
     query = update.callback_query
     await query.answer()
+    # --- OBTENEMOS EL CHAT ID CORRECTAMENTE ---
+    chat_id = query.message.chat_id
 
-    # El callback_data será "onboarding_nivel_seguro:X"
     nivel_str = query.data.split(":")[1]
-    chat_id = update.effective_chat.id
-    
     set_config(chat_id, "modo_seguro", nivel_str)
-    
+
     descripcion_nivel = TEXTOS["niveles_modo_seguro"].get(nivel_str, "Desconocido")
-    mensaje_confirmacion = get_text(
-        "ajustes_confirmados", 
-        nivel=nivel_str, 
-        descripcion=descripcion_nivel
+    await query.edit_message_text(
+        get_text("ajustes_confirmados", nivel=nivel_str, descripcion=descripcion_nivel),
+        parse_mode="Markdown"
     )
-    
-    # Editamos el mensaje original para mostrar la confirmación y quitar los botones
-    await query.edit_message_text(text=mensaje_confirmacion, parse_mode="Markdown")
 
-
-    # AHORA, en lugar de pedir la ubicación directamente, mostramos el menú de elección
-    tz_actual = get_config(update.effective_chat.id, "user_timezone") or "aún sin configurar"
-    
     keyboard = [
         [InlineKeyboardButton("🪄 Automático (con ubicación)", callback_data="onboarding_tz_auto")],
         [InlineKeyboardButton("✍️ Manual (escribir ciudad)", callback_data="onboarding_tz_manual")],
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    texto_pregunta = get_text("onboarding_pide_zona_horaria")
-    
-    # Enviamos un nuevo mensaje para el siguiente paso
     await context.bot.send_message(
-        chat_id=update.effective_chat.id,
-        text=texto_pregunta,
-        reply_markup=reply_markup,
+        chat_id=chat_id,
+        text=get_text("onboarding_pide_zona_horaria"),
+        reply_markup=InlineKeyboardMarkup(keyboard),
         parse_mode="Markdown"
     )
     return ONBOARDING_PIDE_METODO_TZ
-
 
 async def onboarding_tz_metodo_automatico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Prepara para recibir una ubicación durante el onboarding."""
@@ -140,38 +130,19 @@ async def onboarding_tz_metodo_manual(update: Update, context: ContextTypes.DEFA
     # Le decimos al ConversationHandler que pase al estado de "esperar ciudad".
     return ONBOARDING_PIDE_CIUDAD
 
-
 async def recibir_ubicacion_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Maneja la recepción de una ubicación durante el onboarding.
-    Si tiene éxito, guarda todo y finaliza la conversación.
-    """
-    chat_id = update.effective_chat.id
-    lat = update.message.location.latitude
-    lon = update.message.location.longitude
+    """Paso final (automático): Recibe la ubicación y finaliza el onboarding."""
     tf = TimezoneFinder()
-    user_timezone = tf.timezone_at(lng=lon, lat=lat)
+    user_timezone = tf.timezone_at(lng=update.message.location.longitude, lat=update.message.location.latitude)
 
     if user_timezone:
-        # Éxito: Guardamos la zona horaria y marcamos el onboarding como completo
-        set_config(chat_id, "user_timezone", user_timezone)
-        set_config(chat_id, "onboarding_completo", "1")
-        
-        mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
-        
-        await update.message.reply_text(
-            mensaje_final,
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardRemove() # Limpiamos el teclado de ubicación
-        )
-        return ConversationHandler.END
+        await _finalizar_onboarding(update, context, user_timezone)
     else:
-        # Fallo (muy raro): No se encontró zona horaria
         await update.message.reply_text(
-            "👵 ¡Vaya! Por alguna razón no he podido determinar tu zona horaria desde esa ubicación. Inténtalo de nuevo manualmente desde /ajustes.",
+            "👵 ¡Vaya! No he podido determinar tu zona horaria. Inténtalo manualmente desde /ajustes.",
             reply_markup=ReplyKeyboardRemove()
         )
-        return ConversationHandler.END
+    return ConversationHandler.END
 
 
 async def recibir_ciudad_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -212,35 +183,48 @@ async def recibir_ciudad_onboarding(update: Update, context: ContextTypes.DEFAUL
         return ONBOARDING_PIDE_CIUDAD
 
 async def confirmar_ciudad_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recibe el SÍ/NO del usuario para la zona horaria durante el onboarding."""
-    chat_id = update.effective_chat.id
-    respuesta = update.message.text.strip().upper()
+    """Paso final (manual): Recibe el SÍ/NO y finaliza el onboarding."""
+    respuesta_normalizada = normalizar_texto(update.message.text.strip())
 
-    if respuesta == "SI":
+    if respuesta_normalizada.startswith("si"):
         user_timezone = context.user_data.get("onboarding_tz_a_confirmar")
         if user_timezone:
-            # Éxito: Guardamos todo y finalizamos el onboarding
-            set_config(chat_id, "user_timezone", user_timezone)
-            set_config(chat_id, "onboarding_completo", "1")
-            
-            mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
-            await update.message.reply_text(
-                mensaje_final,
-                parse_mode="Markdown"
-            )
-            context.user_data.clear()
+            await _finalizar_onboarding(update, context, user_timezone)
             return ConversationHandler.END
             
-    elif respuesta == "NO":
+    elif respuesta_normalizada.startswith("no"):
         await update.message.reply_text(get_text("timezone_reintentar"))
-        # Devolvemos al usuario al paso de escribir la ciudad
         return ONBOARDING_PIDE_CIUDAD
+    
     else:
-        # El usuario no ha escrito ni SI ni NO
         await update.message.reply_text("👵 ¡Criatura! Solo entiendo `Si` o `No`. Venga, otra vez.")
-        # Mantenemos la conversación en el mismo estado, esperando la respuesta correcta
         return ONBOARDING_CONFIRMAR_CIUDAD
     
+    # Fallback por si algo sale mal (ej: se pierde el user_data)
+    return await cancelar_conversacion(update, context)
+    
+async def _finalizar_onboarding(update: Update, context: ContextTypes.DEFAULT_TYPE, user_timezone: str):
+    """
+    Función auxiliar centralizada para guardar todas las configuraciones finales.
+    """
+    chat_id = update.effective_chat.id
+    
+    # 1. Guardar configuraciones en la base de datos
+    set_config(chat_id, "user_timezone", user_timezone)
+    set_config(chat_id, "onboarding_completo", "1")
+    set_config(chat_id, "resumen_diario_activado", "1") # Activado por defecto
+    set_config(chat_id, "resumen_diario_hora", "08:00") # A las 8:00 por defecto
+
+    # 2. Programar el primer job de resumen diario para el nuevo usuario
+    programar_resumen_diario_usuario(chat_id, "08:00", user_timezone)
+    
+    # 3. Enviar mensaje de confirmación y limpiar teclados.
+    mensaje_final = get_text("onboarding_finalizado", timezone=user_timezone)
+    await update.message.reply_text(
+        mensaje_final, parse_mode="Markdown", reply_markup=ReplyKeyboardRemove()
+    )
+    context.user_data.clear()
+
 async def error_pide_ubicacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Se activa si el usuario escribe texto cuando se esperaba la ubicación."""
     await update.message.reply_text(get_text("error_esperaba_ubicacion"))
@@ -252,7 +236,9 @@ async def error_pide_ciudad(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     return ONBOARDING_PIDE_CIUDAD
 
 
-# Handler para la conversación de bienvenida
+# =============================================================================
+# CONVERSATION HANDLER
+# =============================================================================
 start_handler = ConversationHandler(
     entry_points=[CommandHandler("start", start)],
     states={
@@ -277,9 +263,6 @@ start_handler = ConversationHandler(
     },
     fallbacks=[
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado) 
     ]
 )
-
-
-################################################################################

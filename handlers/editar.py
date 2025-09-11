@@ -1,56 +1,71 @@
+# handlers/editar.py
+"""
+Módulo para el comando /editar.
+
+Gestiona una conversación compleja y ramificada para permitir al usuario
+modificar un recordatorio existente. El flujo es el siguiente:
+1.  Elige un ID (modo rápido o interactivo).
+2.  Se presenta un sub-menú para elegir qué editar: el contenido o el aviso.
+3.a. Si elige contenido, se pide el nuevo `fecha * texto`.
+3.b. Si elige aviso, se pide el nuevo tiempo de aviso.
+4.  Se guarda el cambio, se reprograman los avisos si es necesario, y se finaliza.
+"""
+
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import (
-    ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
-)
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
 from datetime import datetime
+import pytz
+
 from db import get_connection, get_config
-from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado, construir_mensaje_lista_completa
+from utils import (
+    enviar_lista_interactiva, parsear_recordatorio, parsear_tiempo_a_minutos, 
+    cancelar_conversacion, comando_inesperado, convertir_utc_a_local
+)
+from handlers.lista import TITULOS, lista_cancel_handler
 from avisos import cancelar_avisos, programar_avisos
 from personalidad import get_text
 
-# Estados para la conversación de edición
+# --- DEFINICIÓN DE ESTADOS ---
 ELEGIR_ID, ELEGIR_OPCION, EDITAR_RECORDATORIO, EDITAR_AVISO = range(4)
 
+
+
+# =============================================================================
+# SECCIÓN 1: SELECCIÓN DEL RECORDATORIO A EDITAR
+# =============================================================================
+
 async def editar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Punto de entrada para /editar. Muestra la lista de recordatorios."""
-    chat_id = update.effective_chat.id
+    """Punto de entrada para /editar. Dirige al modo rápido o interactivo."""
+    if context.args:
+        if len(context.args) > 1:
+            await update.message.reply_text("👵 ¡Tranquilidad! Solo puedes editar un recordatorio a la vez.")
+            return ConversationHandler.END
+        return await _procesar_id_y_avanzar(update, context, context.args[0])
     
-    with get_connection() as conn:
-        cursor = conn.cursor()
-
-        cursor.execute(
-            "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone FROM recordatorios WHERE chat_id = ? ORDER BY estado, user_id",
-            (chat_id,)
-        )
-        recordatorios = cursor.fetchall()
-
-    if not recordatorios:
-        await update.message.reply_text("📭 Criatura, no tienes recordatorios pendientes o pasados que puedas editar.")
-        return ConversationHandler.END
-
-    mensaje_lista = construir_mensaje_lista_completa(
-        chat_id, 
-        recordatorios, 
-        titulo_general="🪄 Recordatorios para Editar 🪄\n"
+    await enviar_lista_interactiva(
+        update, context, context_key="editar", titulos=TITULOS["editar"], mostrar_boton_cancelar=True
     )
-
-    mensaje_final = mensaje_lista + "\n\n" + "\n✏️ Escribe el ID del recordatorio que quieras editar o /cancelar para salir:"
-
-    await update.message.reply_text(mensaje_final, parse_mode="Markdown")
     return ELEGIR_ID
 
+
 async def recibir_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recibe el ID del recordatorio a editar y muestra las opciones."""
+    """Recibe el ID escrito por el usuario tras ver la lista."""
+    return await _procesar_id_y_avanzar(update, context, update.message.text)
+
+
+async def _procesar_id_y_avanzar(update: Update, context: ContextTypes.DEFAULT_TYPE, user_id_str: str) -> int:
+    """
+    Busca el recordatorio por ID, lo guarda en el contexto y muestra el menú de opciones de edición.
+    """
     chat_id = update.effective_chat.id
     try:
-        user_id_a_editar = int(update.message.text.replace("#", ""))
+        user_id_a_editar = int(user_id_str.replace("#", ""))
     except (ValueError, TypeError):
         await update.message.reply_text(get_text("error_no_id"))
-        return ELEGIR_ID
+        return ConversationHandler.END
 
     with get_connection() as conn:
         cursor = conn.cursor()
-        # Pedimos toda la info que necesitaremos
         cursor.execute(
             "SELECT id, texto, fecha_hora, timezone, aviso_previo FROM recordatorios WHERE user_id = ? AND chat_id = ?", 
             (user_id_a_editar, chat_id)
@@ -59,48 +74,74 @@ async def recibir_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if not recordatorio:
         await update.message.reply_text(get_text("error_no_id"))
-        return ELEGIR_ID
+        return ConversationHandler.END
 
+    # Guardamos toda la información necesaria para los siguientes pasos.
     global_id, texto, fecha_iso, timezone, aviso_previo = recordatorio
-    
     context.user_data["editar_info"] = {
-        "global_id": global_id, "user_id": user_id_a_editar,
-        "texto": texto, "fecha_iso": fecha_iso,
-        "timezone": timezone, "aviso_previo": aviso_previo
+        "global_id": global_id, "user_id": user_id_a_editar, "texto": texto,
+        "fecha_iso": fecha_iso, "timezone": timezone, "aviso_previo": aviso_previo
     }
 
+    # Preparamos y enviamos el menú de opciones.
+    user_tz = get_config(chat_id, "user_timezone") or "UTC"
     fecha_str = "Sin fecha"
     if fecha_iso:
-        fecha_local = convertir_utc_a_local(datetime.fromisoformat(fecha_iso), timezone)
+        fecha_local = convertir_utc_a_local(datetime.fromisoformat(fecha_iso), timezone or user_tz)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
 
     keyboard = [
         [InlineKeyboardButton("📝 Contenido (Fecha/Texto)", callback_data="editar_contenido")],
         [InlineKeyboardButton("⏳ Aviso Previo", callback_data="editar_aviso")],
+        [InlineKeyboardButton("<< Volver a la lista", callback_data="editar_volver_lista")]
     ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
     
     mensaje = get_text("editar_elige_opcion", user_id=user_id_a_editar, texto=texto, fecha=fecha_str)
-    await update.message.reply_text(mensaje, parse_mode="Markdown", reply_markup=reply_markup)
+    
+    # Reutilizamos el mensaje si venimos de un callback (ej: 'Volver'), si no, enviamos uno nuevo.
+    if update.callback_query:
+        await update.callback_query.edit_message_text(mensaje, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    else:
+        await update.message.reply_text(mensaje, parse_mode="Markdown", reply_markup=InlineKeyboardMarkup(keyboard))
+    
     return ELEGIR_OPCION
 
-# --- Rama 1: Editar Contenido ---
+
+async def editar_volver_a_lista(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Callback para el botón 'Volver'. Muestra la lista interactiva de nuevo."""
+    await enviar_lista_interactiva(
+        update, context, context_key="editar", titulos=TITULOS["editar"], mostrar_boton_cancelar=True
+    )
+    return ELEGIR_ID
+
+
+
+# =============================================================================
+# SECCIÓN 2: RAMA DE EDICIÓN DE "CONTENIDO"
+# =============================================================================
+
 async def pedir_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Pide al usuario que escriba el nuevo `fecha * texto`."""
     query = update.callback_query
     await query.answer()
     info = context.user_data.get("editar_info", {})
     
+    user_tz = get_config(update.effective_chat.id, "user_timezone") or 'UTC'
     fecha_str = "Sin fecha"
     if info.get("fecha_iso"):
-        fecha_local = convertir_utc_a_local(datetime.fromisoformat(info["fecha_iso"]), info["timezone"])
+        fecha_local = convertir_utc_a_local(datetime.fromisoformat(info["fecha_iso"]), info.get("timezone") or user_tz)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
         
-    mensaje = get_text("editar_pide_recordatorio_nuevo", texto_actual=info.get("texto"), fecha_actual=fecha_str)
+    mensaje = get_text("editar_pide_recordatorio_nuevo", texto_actual=info.get("texto", ""), fecha_actual=fecha_str)
     await query.edit_message_text(text=mensaje, parse_mode="Markdown")
     return EDITAR_RECORDATORIO
 
+
 async def guardar_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    info = context.user_data.get("editar_info", {})
+    """Guarda el nuevo contenido, reprograma el aviso (si lo tenía) y finaliza."""
+    info = context.user_data.get("editar_info")
+    if not info: return ConversationHandler.END
+
     chat_id = update.effective_chat.id
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
     
@@ -118,32 +159,71 @@ async def guardar_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAU
         )
         conn.commit()
     
+    # Reprogramamos los avisos usando el 'aviso_previo' que ya estaba guardado.
     cancelar_avisos(str(info["global_id"]))
-    aviso_previo = info.get("aviso_previo", 0) # Usamos el aviso previo que ya tenía
-    
-    if fecha:
+    aviso_previo = info.get("aviso_previo", 0)
+    if fecha and aviso_previo is not None:
         await programar_avisos(chat_id, str(info["global_id"]), info["user_id"], texto, fecha, aviso_previo)
         
-    fecha_str = fecha.strftime("%d %b, %H:%M") if fecha else "Sin fecha"
+    if fecha:
+        # Convertimos la fecha UTC a la zona horaria local del usuario ANTES de formatearla.
+        fecha_local = convertir_utc_a_local(fecha, user_tz)
+        fecha_str = fecha_local.strftime("%d %b, %H:%M")
+    else:
+        fecha_str = "Sin fecha"
+        
     mensaje = get_text("editar_confirmacion_recordatorio", user_id=info["user_id"], texto=texto, fecha=fecha_str)
     await update.message.reply_text(mensaje, parse_mode="Markdown")
     
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Rama 2: Editar Aviso Previo (COMPLETA) ---
+
+
+# =============================================================================
+# SECCIÓN 3: RAMA DE EDICIÓN DE "AVISO PREVIO"
+# =============================================================================
+
 async def pedir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Pide al usuario el nuevo tiempo de aviso previo."""
+    """
+    Pide al usuario el nuevo tiempo de aviso previo, PERO PRIMERO VALIDA
+    si el recordatorio puede tener un aviso.
+    """
     query = update.callback_query
     await query.answer()
     info = context.user_data.get("editar_info", {})
+    chat_id = update.effective_chat.id
+
+
+    # --- LÓGICA DE VALIDACIÓN ---
+    # 1. Obtenemos el estado actual desde la base de datos para estar seguros.
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT estado, fecha_hora FROM recordatorios WHERE id = ?", (info.get("global_id"),))
+        recordatorio_actual = cursor.fetchone()
     
+    if recordatorio_actual:
+        estado_actual, fecha_iso_actual = recordatorio_actual
+        
+        # 2. Comprobamos si el recordatorio está hecho (estado 1).
+        if estado_actual == 1:
+            await context.bot.send_message(chat_id=chat_id, text=get_text("error_aviso_no_permitido"))
+            # Devolvemos al usuario al menú anterior (elegir opción)
+            return ELEGIR_OPCION
+            
+        # 3. Comprobamos si la fecha ya ha pasado.
+        if fecha_iso_actual:
+            user_tz = get_config(chat_id, "user_timezone") or "UTC"
+            fecha_utc = datetime.fromisoformat(fecha_iso_actual)
+            if fecha_utc < datetime.now(pytz.utc):
+                await context.bot.send_message(chat_id=chat_id, text=get_text("error_aviso_no_permitido"))
+                # Mantenemos la conversación en el mismo estado.
+                return ELEGIR_OPCION
+
+    # Si pasa todas las validaciones, continuamos con el flujo normal.
     aviso_actual_min = info.get("aviso_previo", 0)
-    
-    # Formateamos el tiempo actual para mostrarlo
-    if aviso_actual_min > 0:
-        horas = aviso_actual_min // 60
-        mins = aviso_actual_min % 60
+    if aviso_actual_min and aviso_actual_min > 0:
+        horas, mins = divmod(aviso_actual_min, 60)
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
     else:
         tiempo_str = "ninguno"
@@ -152,44 +232,51 @@ async def pedir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     await query.edit_message_text(text=mensaje, parse_mode="Markdown")
     return EDITAR_AVISO
 
-async def guardar_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Recibe el nuevo tiempo de aviso, lo guarda y reprograma."""
-    info = context.user_data.get("editar_info", {})
-    chat_id = update.effective_chat.id
-    
-    aviso_str = update.message.text.strip().lower()
-    minutos = parsear_tiempo_a_minutos(aviso_str)
 
+async def guardar_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Guarda el nuevo aviso, valida la fecha y reprograma."""
+    info = context.user_data.get("editar_info")
+    if not info: return ConversationHandler.END
+    
+    minutos = parsear_tiempo_a_minutos(update.message.text)
     if minutos is None:
         await update.message.reply_text(get_text("error_aviso_invalido"))
         return EDITAR_AVISO
-
-    with get_connection() as conn:
-        conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
-        conn.commit()
-
-    cancelar_avisos(str(info["global_id"]))
+        
+    if minutos == 0:
+        with get_connection() as conn:
+            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (0, info["global_id"]))
+            conn.commit()
+        cancelar_avisos(str(info["global_id"]))
+        mensaje_confirmacion = get_text("editar_confirmacion_aviso", user_id=info["user_id"], aviso_nuevo="ninguno")
     
-    # Necesitamos la fecha (que está en texto) para reprogramar
-    fecha = datetime.fromisoformat(info["fecha_iso"]) if info.get("fecha_iso") else None
-    if fecha:
-        await programar_avisos(chat_id, str(info["global_id"]), info["user_id"], info["texto"], fecha, minutos)
-
-    # Formateamos el nuevo tiempo para el mensaje de confirmación
-    if minutos > 0:
-        horas = minutos // 60
-        mins = minutos % 60
-        tiempo_nuevo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
+    elif not info.get("fecha_iso"):
+        await update.message.reply_text(get_text("error_aviso_sin_fecha"))
+        return EDITAR_AVISO
+    
     else:
-        tiempo_nuevo_str = "ninguno"
+        fecha = datetime.fromisoformat(info["fecha_iso"])
+        se_programo_aviso = await programar_avisos(
+            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["texto"], fecha, minutos
+        )
+        if se_programo_aviso:
+            with get_connection() as conn:
+                conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
+                conn.commit()
+            horas, mins = divmod(minutos, 60)
+            tiempo_nuevo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
+            mensaje_confirmacion = get_text("editar_confirmacion_aviso", user_id=info["user_id"], aviso_nuevo=tiempo_nuevo_str)
+        else:
+            await update.message.reply_text(get_text("error_aviso_pasado_reintentar"))
+            return EDITAR_AVISO
 
-    mensaje = get_text("editar_confirmacion_aviso", user_id=info["user_id"], aviso_nuevo=tiempo_nuevo_str)
-    await update.message.reply_text(mensaje, parse_mode="Markdown")
-
+    await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Conversational Handler ---
+# =============================================================================
+# CONVERSATION HANDLER
+# =============================================================================
 editar_handler = ConversationHandler(
     entry_points=[CommandHandler("editar", editar_cmd)],
     states={
@@ -197,12 +284,14 @@ editar_handler = ConversationHandler(
         ELEGIR_OPCION: [
             CallbackQueryHandler(pedir_nuevo_recordatorio, pattern="^editar_contenido$"),
             CallbackQueryHandler(pedir_nuevo_aviso, pattern="^editar_aviso$"),
+            CallbackQueryHandler(editar_volver_a_lista, pattern="^editar_volver_lista$"),
         ],
         EDITAR_RECORDATORIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_nuevo_recordatorio)],
         EDITAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, guardar_nuevo_aviso)],
     },
     fallbacks=[
+        lista_cancel_handler,
         CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado) # <-- Maneja las interrupciones
+        MessageHandler(filters.COMMAND, comando_inesperado)
     ],
 )

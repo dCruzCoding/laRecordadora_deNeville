@@ -103,7 +103,7 @@ La base de datos (`la_recordadora.db`) y el archivo de trabajos (`jobs.sqlite`) 
 -   **/borrar `[ID1 ID2 ...]`**: Elimina uno o más recordatorios por su ID.
 -   **/cambiar `[ID1 ID2 ...]`**: Cambia el estado de un recordatorio (de `pendiente` a `hecho` o viceversa).
 -   **/editar**: Inicia una conversación para modificar un recordatorio existente (contenido o aviso).
--   **/ajustes**: Abre el panel de configuración para gestionar el Modo Seguro y tu Zona Horaria.
+-   **/ajustes**: Abre el panel de configuración para gestionar el modo seguro, tu zona horaria o el resumen diario.
 -   **/cancelar**: Cancela cualquier operación o conversación en curso.
 -   **/reset**: ⚠️ **(Solo para el dueño del bot)** Borra **TODOS** los recordatorios de la base de datos.
 
