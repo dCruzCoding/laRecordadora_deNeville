@@ -30,15 +30,6 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
     -   **Se ha enriquecido la documentación** en todos los archivos con `docstrings` y comentarios explicativos para aclarar la arquitectura y las decisiones de diseño.
     -   **Manejo de Secretos Profesional:** Se ha implementado el uso de archivos `.env` con `python-dotenv` para la gestión segura de credenciales en entornos locales.
 
-### 🐛 Problemas Resueltos
-
-¡Entendido! Me parece una excelente idea para mejorar la legibilidad y hacer que cada punto sea más fácil de referenciar.
-
-He reestructurado todo el changelog para incluir la numeración que has solicitado después de cada "Problema" y "Solución".
-
-Aquí tienes el resultado final:
-
----
 
 ### 🐛 Problemas Resueltos
 
