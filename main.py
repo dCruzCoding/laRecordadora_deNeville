@@ -137,4 +137,4 @@ if __name__ == "__main__":
             print("🛑 El bot se detendrá. Revisa el error para solucionarlo.")
             break # Salimos del bucle y terminamos el programa.
 
-    print("✅ Proceso finalizado.")
+    print("\n~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nPrograma finalizado, ¡Hasta otra! 🙋")

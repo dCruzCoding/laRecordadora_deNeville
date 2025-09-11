@@ -165,7 +165,13 @@ async def guardar_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAU
     if fecha and aviso_previo is not None:
         await programar_avisos(chat_id, str(info["global_id"]), info["user_id"], texto, fecha, aviso_previo)
         
-    fecha_str = fecha.strftime("%d %b, %H:%M") if fecha else "Sin fecha"
+    if fecha:
+        # Convertimos la fecha UTC a la zona horaria local del usuario ANTES de formatearla.
+        fecha_local = convertir_utc_a_local(fecha, user_tz)
+        fecha_str = fecha_local.strftime("%d %b, %H:%M")
+    else:
+        fecha_str = "Sin fecha"
+        
     mensaje = get_text("editar_confirmacion_recordatorio", user_id=info["user_id"], texto=texto, fecha=fecha_str)
     await update.message.reply_text(mensaje, parse_mode="Markdown")
     

@@ -138,7 +138,7 @@ async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: i
         
         # El botón de posponer solo se muestra si el aviso es de más de 10 minutos
         if minutos > 10:
-            keyboard_buttons.insert(1, InlineKeyboardButton("⏰ +10 min", callback_data=f"posponer:2:{rid}"))
+            keyboard_buttons.insert(1, InlineKeyboardButton("⏰ +10 min", callback_data=f"posponer:10:{rid}"))
 
         reply_markup = InlineKeyboardMarkup([keyboard_buttons])
         await bot_state.telegram_app.bot.send_message(
