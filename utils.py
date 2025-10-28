@@ -151,12 +151,12 @@ def convertir_utc_a_local(fecha_utc: datetime, user_timezone_str: str) -> dateti
 
 def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
     """Formatea una única línea de la lista de recordatorios, incluyendo la info del aviso."""
-    _, user_id, _, texto, fecha_iso, estado, aviso_previo, timezone_recordatorio = recordatorio
+    _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio = recordatorio
     lineas = []
     fecha_local = None
 
-    if fecha_iso:
-        fecha_utc = datetime.fromisoformat(fecha_iso)
+    if fecha_utc:
+        # Ya no necesitamos datetime.fromisoformat(), porque ya tenemos el objeto.
         # Usa la zona horaria específica del recordatorio si existe, si no, la global del usuario.
         tz_para_mostrar = timezone_recordatorio or user_tz_global
         fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
@@ -167,9 +167,9 @@ def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_globa
     prefijo = "✅" if estado == 1 else "⬜️"
     lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
     
+    # Esta parte ya estaba bien, pero la incluyo para que tengas la función completa.
     now_aware = datetime.now(pytz.timezone(user_tz_global))
 
-    # El aviso solo se muestra si el recordatorio está pendiente, tiene fecha futura y un aviso programado.
     if estado == 0 and fecha_local and fecha_local > now_aware and aviso_previo and aviso_previo > 0:
         fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
         lineas.append(f"  └─ 🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}")

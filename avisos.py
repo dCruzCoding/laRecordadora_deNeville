@@ -9,7 +9,6 @@ Sus responsabilidades incluyen:
 - Programar y cancelar las tareas recurrentes, como el resumen diario.
 """
 
-
 from datetime import datetime, timedelta
 import pytz
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -17,17 +16,23 @@ from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from telegram.ext import Application
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
+# Importaciones módulos locales
 import bot_state # Módulo de estado global para acceder a la instancia de la app
 from personalidad import get_text
 from db import get_connection
+from config import SUPABASE_DB_URL
 
 
 # --- CONFIGURACIÓN DEL SCHEDULER ---
-# Se utiliza una base de datos SQLite para la persistencia de los trabajos (jobs),
-# lo que permite que las tareas programadas sobrevivan a reinicios del bot.
+
+# CONSTRUIMOS LA URL ESPECIAL PARA EL SCHEDULER
+# SQLAlchemy necesita este parámetro para funcionar bien con PgBouncer (el pooler de Supabase)
+# y evitar que las conexiones se cierren inesperadamente.
+SCHEDULER_DB_URL = f"{SUPABASE_DB_URL}?options=-c%20pool_pre_ping=true"
+
 # Todas las fechas se manejan internamente en UTC para evitar ambigüedades.
 scheduler = AsyncIOScheduler(
-    jobstores={'default': SQLAlchemyJobStore(url='sqlite:///jobs.sqlite')},
+    jobstores={'default': SQLAlchemyJobStore(url=SUPABASE_DB_URL)},
     timezone=pytz.utc
 )
 

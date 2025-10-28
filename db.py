@@ -2,26 +2,26 @@
 """
 Módulo de Acceso a la Base de Datos (Capa de Datos).
 
-Este archivo contiene toda la lógica para interactuar con la base de datos SQLite.
-Se encarga de la creación de tablas, y de todas las operaciones de lectura y
-escritura (CRUD) para los recordatorios y las configuraciones de usuario.
+Este archivo contiene toda la lógica para interactuar con la base de datos externa
+alojada en Supabase (PostgreSQL).
 """
 
-import sqlite3
+import psycopg2
 from typing import Tuple, List, Optional
 from datetime import datetime
 import pytz
 
-# --- CONSTANTES Y CONEXIÓN ---
-DB_PATH = "la_recordadora.db"
+# Importaciones módulos locales
+from config import SUPABASE_DB_URL
 
-def get_connection() -> sqlite3.Connection:
+
+def get_connection(): 
     """
-    Establece y devuelve una conexión a la base de datos SQLite.
-    `check_same_thread=False` es necesario porque el bot se ejecuta en un hilo
-    diferente al del servidor web (Flask) en el despliegue de Render.
+    Establece y devuelve una conexión a la base de datos PostgreSQL en Supabase.
     """
-    return sqlite3.connect(DB_PATH, check_same_thread=False)
+    # psycopg2 gestiona el 'threading' de forma diferente y más robusta.
+    # No se necesita el check_same_thread=False.
+    return psycopg2.connect(SUPABASE_DB_URL)
 
 
 # =============================================================================
@@ -30,153 +30,137 @@ def get_connection() -> sqlite3.Connection:
 
 def crear_tablas():
     """
-
     Crea las tablas 'recordatorios' y 'configuracion' si no existen.
-    Esta función es idempotente y segura de ejecutar en cada inicio del bot.
     """
+    # Usamos 'with' para asegurar que la conexión y el cursor se cierren solos.
     with get_connection() as conn:
-        cursor = conn.cursor()
+        with conn.cursor() as cursor:
+            # CAMBIO: La sintaxis de autoincremento en PostgreSQL es SERIAL o BIGSERIAL.
+            # BIGSERIAL es mejor para IDs que pueden crecer mucho.
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS recordatorios (
+                    id BIGSERIAL PRIMARY KEY,                  -- ID único global
+                    user_id INTEGER NOT NULL,
+                    chat_id BIGINT NOT NULL,                   -- Usar BIGINT para chat_id por si acaso
+                    texto TEXT,
+                    fecha_hora TIMESTAMPTZ,                    -- TIMESTAMPTZ es el tipo ideal para UTC en Postgres
+                    estado INTEGER DEFAULT 0,
+                    aviso_previo INTEGER,
+                    timezone TEXT
+                )
+            """)
 
-        # Tabla para almacenar los recordatorios de todos los usuarios.
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS recordatorios (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,      -- ID único global para cada recordatorio
-                user_id INTEGER NOT NULL,                  -- ID secuencial por usuario (ej: #1, #2)
-                chat_id INTEGER NOT NULL,                  -- ID del chat donde se creó
-                texto TEXT,
-                fecha_hora TEXT,                           -- Fecha y hora en formato ISO y zona horaria UTC
-                estado INTEGER DEFAULT 0,                  -- 0: Pendiente, 1: Hecho
-                aviso_previo INTEGER,                      -- Minutos de antelación para el aviso
-                timezone TEXT                              -- Zona horaria original con la que se creó
-            )
-        """)
-
-        # Tabla para almacenar configuraciones clave-valor por usuario.
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS configuracion (
-                chat_id INTEGER NOT NULL,
-                clave TEXT NOT NULL,
-                valor TEXT,
-                PRIMARY KEY (chat_id, clave)
-            )
-        """)
-        
-        conn.commit()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS configuracion (
+                    chat_id BIGINT NOT NULL,
+                    clave TEXT NOT NULL,
+                    valor TEXT,
+                    PRIMARY KEY (chat_id, clave)
+                )
+            """)
+            
 
 
 # =============================================================================
 # FUNCIONES DE CONFIGURACIÓN (CLAVE-VALOR)
 # =============================================================================
 
+# CAMBIO CLAVE: PostgreSQL usa %s como placeholder en lugar de ?.
+
 def get_config(chat_id: int, key: str) -> Optional[str]:
     """Obtiene el valor de una clave de configuración para un usuario."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT valor FROM configuracion WHERE chat_id = ? AND clave = ?", (chat_id, key))
-        row = cursor.fetchone()
-        return row[0] if row else None
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT valor FROM configuracion WHERE chat_id = %s AND clave = %s", (chat_id, key))
+            row = cursor.fetchone()
+            return row[0] if row else None
 
 def set_config(chat_id: int, key: str, value: str):
     """Establece o actualiza el valor de una clave de configuración para un usuario."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("INSERT OR REPLACE INTO configuracion (chat_id, clave, valor) VALUES (?, ?, ?)", (chat_id, key, value))
-        conn.commit()
-
+        with conn.cursor() as cursor:
+            # CAMBIO: 'INSERT OR REPLACE' es de SQLite. El equivalente en PostgreSQL es 'INSERT ... ON CONFLICT'.
+            sql = """
+                INSERT INTO configuracion (chat_id, clave, valor) VALUES (%s, %s, %s)
+                ON CONFLICT (chat_id, clave) DO UPDATE SET valor = EXCLUDED.valor;
+            """
+            cursor.execute(sql, (chat_id, key, value))
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE RECORDATORIOS
 # =============================================================================
 
 def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items_per_page: int = 7) -> Tuple[List, int]:
-    """
-    Función universal para obtener recordatorios con filtros y paginación.
-    """
     now_utc = datetime.now(pytz.utc)
 
     with get_connection() as conn:
-        cursor = conn.cursor()
-        query_base = "FROM recordatorios WHERE chat_id = ?"
-        params = [chat_id]
+        with conn.cursor() as cursor:
+            query_base = "FROM recordatorios WHERE chat_id = %s"
+            params = [chat_id]
 
-        if filtro == "futuro":
-            query_base += " AND (fecha_hora IS NULL OR fecha_hora > ?)"
-            params.append(now_utc.isoformat())
-        elif filtro == "pasado":
-            query_base += " AND fecha_hora IS NOT NULL AND fecha_hora <= ?"
-            params.append(now_utc.isoformat())
-        elif filtro == "hoy":
-            # Se calcula el inicio y fin del día en la TZ del usuario para precisión.
-            user_tz_str = get_config(chat_id, "user_timezone") or "UTC"
-            user_tz = pytz.timezone(user_tz_str)
-            now_local = now_utc.astimezone(user_tz)
+            if filtro == "futuro":
+                query_base += " AND (fecha_hora IS NULL OR fecha_hora > %s)"
+                params.append(now_utc) # psycopg2 maneja objetos datetime directamente
+            elif filtro == "pasado":
+                query_base += " AND fecha_hora IS NOT NULL AND fecha_hora <= %s"
+                params.append(now_utc)
+            elif filtro == "hoy":
+                user_tz_str = get_config(chat_id, "user_timezone") or "UTC"
+                user_tz = pytz.timezone(user_tz_str)
+                now_local = now_utc.astimezone(user_tz)
+                
+                start_of_day_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_of_day_local = now_local.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+                start_of_day_utc = start_of_day_local.astimezone(pytz.utc)
+                end_of_day_utc = end_of_day_local.astimezone(pytz.utc)
+                
+                query_base += " AND estado = 0 AND fecha_hora >= %s AND fecha_hora <= %s"
+                params.extend([start_of_day_utc, end_of_day_utc])
+
+            cursor.execute(f"SELECT COUNT(id) {query_base}", tuple(params))
+            total_items = cursor.fetchone()[0]
+
+            if total_items == 0:
+                return [], 0
+
+            offset = (page - 1) * items_per_page
+            query_select = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone"
+            query_order = "ORDER BY fecha_hora ASC"
             
-            start_of_day_local = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_of_day_local = now_local.replace(hour=23, minute=59, second=59, microsecond=999999)
+            cursor.execute(f"{query_select} {query_base} {query_order} LIMIT %s OFFSET %s", tuple(params + [items_per_page, offset]))
+            recordatorios_pagina = cursor.fetchall()
 
-            # Se convierten los límites a UTC para la consulta en la base de datos.
-            start_of_day_utc = start_of_day_local.astimezone(pytz.utc)
-            end_of_day_utc = end_of_day_local.astimezone(pytz.utc)
-            
-            query_base += " AND estado = 0 AND fecha_hora >= ? AND fecha_hora <= ?"
-            params.extend([start_of_day_utc.isoformat(), end_of_day_utc.isoformat()])
-
-        cursor.execute(f"SELECT COUNT(id) {query_base}", tuple(params))
-        total_items = cursor.fetchone()[0]
-
-        if total_items == 0:
-            return [], 0
-
-        offset = (page - 1) * items_per_page
-        query_select = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone"
-        query_order = "ORDER BY fecha_hora ASC"
-        
-        cursor.execute(f"{query_select} {query_base} {query_order} LIMIT ? OFFSET ?", tuple(params + [items_per_page, offset]))
-        recordatorios_pagina = cursor.fetchall()
-
-        return recordatorios_pagina, total_items
+            return recordatorios_pagina, total_items
 
 def get_todos_los_chat_ids() -> List[int]:
-    """Obtiene una lista de todos los chat_id únicos de los usuarios del bot."""
     with get_connection() as conn:
-        cursor = conn.cursor()
-        # UNION es más eficiente que dos consultas separadas para obtener IDs únicos.
-        cursor.execute("SELECT DISTINCT chat_id FROM recordatorios UNION SELECT DISTINCT chat_id FROM configuracion")
-        return [item[0] for item in cursor.fetchall()]
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT DISTINCT chat_id FROM recordatorios UNION SELECT DISTINCT chat_id FROM configuracion")
+            return [item[0] for item in cursor.fetchall()]
 
 def borrar_recordatorios_pasados(chat_id: int) -> tuple[int, List[int]]:
-    """
-    Elimina los recordatorios pasados de un usuario basándose en la hora UTC.
-    
-    Returns:
-        tuple: (Número de recordatorios borrados, Lista de IDs de los recordatorios borrados).
-    """
-    now_utc_iso = datetime.now(pytz.utc).isoformat()
+    now_utc = datetime.now(pytz.utc)
     with get_connection() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute(
-            "SELECT id FROM recordatorios WHERE chat_id = ? AND fecha_hora IS NOT NULL AND fecha_hora <= ?",
-            (chat_id, now_utc_iso)
-        )
-        ids_a_borrar = [item[0] for item in cursor.fetchall()]
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id FROM recordatorios WHERE chat_id = %s AND fecha_hora IS NOT NULL AND fecha_hora <= %s",
+                (chat_id, now_utc)
+            )
+            ids_a_borrar = [item[0] for item in cursor.fetchall()]
 
-        if not ids_a_borrar:
-            return 0, []
+            if not ids_a_borrar:
+                return 0, []
 
-        placeholders = ','.join(['?'] * len(ids_a_borrar))
-        cursor.execute(f"DELETE FROM recordatorios WHERE id IN ({placeholders})", tuple(ids_a_borrar))
-        num_borrados = cursor.rowcount
-        conn.commit()
+            # psycopg2 puede tomar una tupla de IDs directamente
+            cursor.execute("DELETE FROM recordatorios WHERE id IN %s", (tuple(ids_a_borrar),))
+            num_borrados = cursor.rowcount
 
     return num_borrados, ids_a_borrar
 
 def resetear_base_de_datos():
-    """
-    Función de administrador. ¡PELIGRO! Elimina TODOS los recordatorios de TODOS los usuarios.
-    """
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM recordatorios")
-        conn.commit()
+        with conn.cursor() as cursor:
+            # TRUNCATE es más rápido que DELETE para vaciar tablas grandes en PostgreSQL
+            cursor.execute("TRUNCATE TABLE recordatorios")
     print("🧹 La tabla de recordatorios ha sido vaciada por completo.")

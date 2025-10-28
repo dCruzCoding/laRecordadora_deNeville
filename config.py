@@ -45,6 +45,9 @@ except locale.Error:
 # El valor por defecto es un placeholder y NO DEBE ser un token real en el código.
 TOKEN: str | None = os.getenv("TELEGRAM_TOKEN")
 
+# --- URL de la Base de Datos (SUPABASE) ---
+SUPABASE_DB_URL: str | None = os.getenv("SUPABASE_DB_URL")
+
 # --- ID del Propietario del Bot ---
 # Se lee desde el entorno. Debe ser un string en el .env que convertimos a int.
 OWNER_ID_STR: str | None = os.getenv("OWNER_ID")
@@ -58,11 +61,13 @@ if OWNER_ID_STR and OWNER_ID_STR.isdigit():
 # =============================================================================
 
 # Comprobación de que las variables esenciales han sido cargadas.
-if not TOKEN or not OWNER_ID:
+if not TOKEN or not OWNER_ID or not SUPABASE_DB_URL:
     print("🚨 ¡ERROR DE CONFIGURACIÓN! 🚨")
     if not TOKEN:
         print("- La variable de entorno TELEGRAM_TOKEN no está definida.")
     if not OWNER_ID:
         print("- La variable de entorno OWNER_ID no está definida o no es un número válido.")
+    if not SUPABASE_DB_URL:
+        print("- La variable de entorno SUPABASE_DB_URL no está definida.")
     print("Asegúrate de haber creado un archivo .env en local o de haber configurado las variables en tu plataforma de despliegue.")
     exit()

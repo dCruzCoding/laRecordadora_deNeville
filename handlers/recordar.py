@@ -64,22 +64,20 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
     # 3. Guardar en la base de datos y obtener IDs.
     fecha_iso = fecha.isoformat() if fecha else None
     with get_connection() as conn:
-        cursor = conn.cursor()
-        
-        # --- LÓGICA DE ID OPTIMIZADA ---
-        # Calculamos el siguiente user_id de forma atómica y segura con una subconsulta.
-        # Esto es más eficiente que hacer un SELECT MAX() separado.
-        cursor.execute(
-            """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, aviso_previo, timezone) 
-               VALUES ((SELECT IFNULL(MAX(user_id), 0) + 1 FROM recordatorios WHERE chat_id = ?), ?, ?, ?, 0, ?)""",
-            (chat_id, chat_id, texto, fecha_iso, user_tz)
-        )
-        recordatorio_id_global = cursor.lastrowid
-        
-        # Obtenemos el user_id que acabamos de insertar.
-        cursor.execute("SELECT user_id FROM recordatorios WHERE id = ?", (recordatorio_id_global,))
-        nuevo_user_id = cursor.fetchone()[0]
-        conn.commit()
+        with conn.cursor() as cursor:
+            
+            # --- LÓGICA DE ID OPTIMIZADA ---
+            # CAMBIO 1: PostgreSQL usa %s en lugar de ?.
+            # CAMBIO 2: IFNULL (SQLite) se reemplaza por COALESCE (SQL estándar).
+            # CAMBIO 3: Para obtener el ID insertado en PostgreSQL, usamos 'RETURNING id'.
+            cursor.execute(
+                """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, aviso_previo, timezone) 
+                   VALUES ((SELECT COALESCE(MAX(user_id), 0) + 1 FROM recordatorios WHERE chat_id = %s), %s, %s, %s, 0, %s)
+                   RETURNING id, user_id""",
+                (chat_id, chat_id, texto, fecha_iso, user_tz)
+            )
+            # Obtenemos los IDs directamente del resultado de la inserción
+            recordatorio_id_global, nuevo_user_id = cursor.fetchone()
 
     # 4. Guardar información para el siguiente paso y confirmar al usuario.
     context.user_data["recordatorio_info"] = {
@@ -134,8 +132,8 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
     if se_programo_aviso:
         # Si tiene éxito, guardamos los minutos en la DB y terminamos.
         with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
-            conn.commit()
+            # CAMBIO: Placeholder a %s
+            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (minutos, info["global_id"]))
             
         horas, mins = divmod(minutos, 60)
         tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"

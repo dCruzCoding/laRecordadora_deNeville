@@ -34,17 +34,18 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
 
     # --- 2. Obtención de datos y validaciones iniciales ---
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT user_id, texto, estado, fecha_hora, aviso_previo FROM recordatorios WHERE id = ?", (rid,)
-        )
-        recordatorio_data = cursor.fetchone()
+        with conn.cursor() as cursor:
+            # Placeholder >> %s
+            cursor.execute(
+                "SELECT user_id, texto, estado, fecha_hora, aviso_previo FROM recordatorios WHERE id = %s", (rid,)
+            )
+            recordatorio_data = cursor.fetchone()
 
     if not recordatorio_data:
         await query.edit_message_text(text="👵 Vaya, parece que este recordatorio ya no existe.")
         return
 
-    user_id, texto, estado_actual, fecha_hora_iso, aviso_previo_actual = recordatorio_data
+    user_id, texto, estado_actual, fecha_recordatorio_utc, aviso_previo_actual = recordatorio_data
 
     # Si el recordatorio ya estaba marcado como "Hecho", informamos y no hacemos nada más.
     if estado_actual == 1:
@@ -55,20 +56,17 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
 
     if action == "mark_done":   # Acción: Marcar como Hecho.
         with get_connection() as conn:
-            # Cambiamos el estado a 1 (Hecho) y reseteamos el aviso_previo a 0.
-            conn.execute("UPDATE recordatorios SET estado = 1, aviso_previo = 0 WHERE id = ?", (rid,))
-            conn.commit()
+            conn.cursor().execute("UPDATE recordatorios SET estado = 1, aviso_previo = 0 WHERE id = %s", (rid,))
         cancelar_avisos(rid) # Cancelamos cualquier job futuro que pudiera quedar.
         await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{texto}_", parse_mode="Markdown")
 
     elif action == "posponer":  # Acción: Posponer. Se pospone el aviso 10min.
         # Validación: No se puede posponer si no hay una fecha final.
-        if not fecha_hora_iso:
+        if not fecha_recordatorio_utc:
             await query.edit_message_text(text="👵 ¡Criatura! No puedes posponer un recordatorio que no tiene una hora final establecida.")
             return
         
         minutos_posponer = int(parts[1])
-        fecha_recordatorio_utc = datetime.fromisoformat(fecha_hora_iso)
         nueva_hora_aviso_utc = datetime.now(pytz.utc) + timedelta(minutes=minutos_posponer)
 
         # Validación: La nueva hora del aviso no puede superar la hora del recordatorio.
@@ -95,8 +93,7 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
 
         # Guardamos el nuevo valor de 'aviso_previo' en la base de datos.
         with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (nuevo_aviso_previo_min, rid))
-            conn.commit()
+            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (nuevo_aviso_previo_min, rid))
 
         # Confirmamos al usuario.
         user_tz_str = get_config(query.message.chat_id, "user_timezone") or 'UTC'
@@ -115,14 +112,13 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
         # Acción: Descartar la notificación.
         with get_connection() as conn:
             # Reseteamos el aviso_previo a 0 para que no aparezca en /lista.
-            conn.execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = ?", (rid,))
-            conn.commit()
-        
+            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = %s", (rid,))
+                    
         # Cancelamos el aviso principal si aún estaba programado.
         cancelar_avisos(rid)
         
         # Editamos el mensaje para quitar los botones, manteniendo el texto original.
-        await query.edit_message_text(text=query.message.text, parse_mode="Markdown")
+        await query.edit_message_text(text=query.message.text, reply_markup=None, parse_mode="Markdown")
 
 
 

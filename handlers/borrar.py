@@ -72,13 +72,13 @@ async def _procesar_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids:
 
     # 2. Hacemos UNA SOLA CONSULTA a la base de datos para obtener la info de todos los IDs.
     with get_connection() as conn:
-        cursor = conn.cursor()
-        # Creamos los placeholders (?, ?, ?) para la consulta IN.
-        placeholders = ','.join(['?'] * len(user_ids_a_buscar))
-        query = f"SELECT user_id, texto, fecha_hora FROM recordatorios WHERE user_id IN ({placeholders}) AND chat_id = ?"
-        
-        cursor.execute(query, tuple(user_ids_a_buscar + [chat_id]))
-        recordatorios_encontrados = cursor.fetchall()
+        with conn.cursor() as cursor:
+            # CAMBIO: PostgreSQL usa %s como placeholder, no ?.
+            # psycopg2 puede manejar una tupla de valores para 'IN' directamente.
+            query = "SELECT user_id, texto, fecha_hora FROM recordatorios WHERE user_id IN %s AND chat_id = %s"
+
+            cursor.execute(query, (tuple(user_ids_a_buscar), chat_id))
+            recordatorios_encontrados = cursor.fetchall()
 
     if not recordatorios_encontrados:
         await update.message.reply_text(get_text("error_no_id"))
@@ -93,10 +93,10 @@ async def _procesar_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids:
         # Si se requiere confirmación, construimos el mensaje y esperamos respuesta.
         user_tz = get_config(chat_id, "user_timezone") or "UTC"
         mensaje_lista = []
-        for user_id, texto, fecha_iso in recordatorios_encontrados:
+        for user_id, texto, fecha_utc in recordatorios_encontrados:
             fecha_str = "Sin fecha"
-            if fecha_iso:
-                fecha_utc = datetime.fromisoformat(fecha_iso)
+            if fecha_utc:
+                # ELIMINAMOS la línea que daba error: datetime.fromisoformat()
                 fecha_local = convertir_utc_a_local(fecha_utc, user_tz)
                 fecha_str = fecha_local.strftime("%d %b, %H:%M")
             mensaje_lista.append(f"  - `#{user_id}`: _{texto}_ ({fecha_str})")
@@ -114,10 +114,10 @@ async def _procesar_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids:
 
 
 async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Se activa si el Modo Seguro está activo. 
-    Utiliza la función normalizar_texto de utils.py para formatear la entrada.
-    Espera la confirmación 'si'."""
-async def confirmar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Se activa si el Modo Seguro está activo. Espera la confirmacion 'si'
+    Utiliza la función normalizar_texto de utils.py para formatear la entrada
+    """
     texto_normalizado = normalizar_texto(update.message.text.strip())
     
     if texto_normalizado.startswith("si"):
@@ -137,19 +137,15 @@ async def ejecutar_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     user_ids_a_borrar = [recordatorio[0] for recordatorio in info_a_borrar]
 
     with get_connection() as conn:
-        cursor = conn.cursor()
-        
-        # 1. Obtenemos los IDs GLOBALES para cancelar los jobs del scheduler.
-        placeholders = ','.join(['?'] * len(user_ids_a_borrar))
-        query_ids = f"SELECT id FROM recordatorios WHERE user_id IN ({placeholders}) AND chat_id = ?"
-        cursor.execute(query_ids, tuple(user_ids_a_borrar + [chat_id]))
-        # Extraemos los IDs de la tupla.
-        ids_globales = [row[0] for row in cursor.fetchall()]
+        with conn.cursor() as cursor:
+            # 1. Obtenemos los IDs GLOBALES para cancelar los jobs del scheduler.
+            query_ids = "SELECT id FROM recordatorios WHERE user_id IN %s AND chat_id = %s"
+            cursor.execute(query_ids, (tuple(user_ids_a_borrar), chat_id))
+            ids_globales = [row[0] for row in cursor.fetchall()]
 
-        # 2. Hacemos UNA SOLA CONSULTA para borrar todos los recordatorios.
-        query_delete = f"DELETE FROM recordatorios WHERE user_id IN ({placeholders}) AND chat_id = ?"
-        cursor.execute(query_delete, tuple(user_ids_a_borrar + [chat_id]))
-        conn.commit()
+            # 2. Hacemos UNA SOLA CONSULTA para borrar todos los recordatorios.
+            query_delete = "DELETE FROM recordatorios WHERE user_id IN %s AND chat_id = %s"
+            cursor.execute(query_delete, (tuple(user_ids_a_borrar), chat_id))
     
     # 3. Cancelamos todos los avisos asociados.
     for rid in ids_globales:

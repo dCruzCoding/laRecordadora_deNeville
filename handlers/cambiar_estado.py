@@ -57,11 +57,11 @@ async def _procesar_ids_para_cambiar(update: Update, context: ContextTypes.DEFAU
         return ConversationHandler.END
 
     with get_connection() as conn:
-        cursor = conn.cursor()
-        placeholders = ','.join(['?'] * len(user_ids_a_buscar))
-        query = f"SELECT user_id, texto, estado FROM recordatorios WHERE user_id IN ({placeholders}) AND chat_id = ?"
-        cursor.execute(query, tuple(user_ids_a_buscar + [chat_id]))
-        recordatorios_encontrados = cursor.fetchall()
+        with conn.cursor() as cursor:
+            # CAMBIO: Placeholder a %s y uso de tupla para IN
+            query = "SELECT user_id, texto, estado FROM recordatorios WHERE user_id IN %s AND chat_id = %s"
+            cursor.execute(query, (tuple(user_ids_a_buscar), chat_id))
+            recordatorios_encontrados = cursor.fetchall()
 
     if not recordatorios_encontrados:
         await update.message.reply_text(get_text("error_no_id"))
@@ -108,48 +108,43 @@ async def ejecutar_cambio(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # 1. Obtenemos toda la información necesaria con UNA SOLA CONSULTA.
     with get_connection() as conn:
-        cursor = conn.cursor()
-        placeholders = ','.join(['?'] * len(user_ids_a_cambiar))
-        query = f"SELECT id, user_id, estado, texto, fecha_hora, aviso_previo FROM recordatorios WHERE user_id IN ({placeholders}) AND chat_id = ?"
-        cursor.execute(query, tuple(user_ids_a_cambiar + [chat_id]))
-        full_info_recordatorios = cursor.fetchall()
+        with conn.cursor() as cursor:
+            # CAMBIO: Placeholder a %s y uso de tupla para IN
+            query = "SELECT id, user_id, estado, texto, fecha_hora, aviso_previo FROM recordatorios WHERE user_id IN %s AND chat_id = %s"
+            cursor.execute(query, (tuple(user_ids_a_cambiar), chat_id))
+            full_info_recordatorios = cursor.fetchall()
 
-        # 2. Actualizamos los estados en la DB con UNA SOLA CONSULTA.
-        # SQLite no soporta CASE en UPDATE tan fácilmente, así que lo hacemos por estado.
-        ids_a_pendiente = [r[1] for r in full_info_recordatorios if r[2] == 1] # user_id
-        ids_a_hecho = [r[1] for r in full_info_recordatorios if r[2] == 0]     # user_id
-        
-        if ids_a_pendiente:
-            p_pend = ','.join(['?'] * len(ids_a_pendiente))
-            conn.execute(f"UPDATE recordatorios SET estado = 0 WHERE user_id IN ({p_pend}) AND chat_id = ?", tuple(ids_a_pendiente + [chat_id]))
-        if ids_a_hecho:
-            p_hecho = ','.join(['?'] * len(ids_a_hecho))
-            conn.execute(f"UPDATE recordatorios SET estado = 1 WHERE user_id IN ({p_hecho}) AND chat_id = ?", tuple(ids_a_hecho + [chat_id]))
-        conn.commit()
+            # CAMBIO: La sintaxis de UPDATE ahora usa %s
+            ids_a_pendiente = [r[1] for r in full_info_recordatorios if r[2] == 1]
+            ids_a_hecho = [r[1] for r in full_info_recordatorios if r[2] == 0]     
+            
+            if ids_a_pendiente:
+                cursor.execute("UPDATE recordatorios SET estado = 0 WHERE user_id IN %s AND chat_id = %s", 
+                               (tuple(ids_a_pendiente), chat_id))
+            if ids_a_hecho:
+                cursor.execute("UPDATE recordatorios SET estado = 1 WHERE user_id IN %s AND chat_id = %s", 
+                               (tuple(ids_a_hecho), chat_id))
 
     # 3. Procesamos los resultados en Python.
     reprogramables, pasados_sin_aviso = [], []
-    user_tz = pytz.timezone(get_config(chat_id, "user_timezone") or "UTC")
     
-    for r_id, u_id, estado, texto, fecha_iso, aviso in full_info_recordatorios:
-        # Si pasa a HECHO (1), cancelamos su aviso.
+    for r_id, u_id, estado, texto, fecha_utc, aviso in full_info_recordatorios:
         if u_id in ids_a_hecho:
             cancelar_avisos(str(r_id))
         
-        # Si pasa a PENDIENTE (0), decidimos si se puede reprogramar.
         elif u_id in ids_a_pendiente:
             cancelar_avisos(str(r_id))
-            if fecha_iso:
-                fecha_dt = datetime.fromisoformat(fecha_iso)
-                if fecha_dt > datetime.now(pytz.utc):
-                    reprogramables.append({"global_id": r_id, "user_id": u_id, "texto": texto, "fecha": fecha_dt})
+            if fecha_utc:
+                # ELIMINAMOS la línea que daba error: datetime.fromisoformat()
+                if fecha_utc > datetime.now(pytz.utc):
+                    reprogramables.append({"global_id": r_id, "user_id": u_id, "texto": texto, "fecha": fecha_utc})
                 else:
                     pasados_sin_aviso.append(f"`#{u_id}`")
 
-    # 4. Enviamos los mensajes de feedback al usuario.
     ids_formateados = [f"`#{r[0]}`" for r in info_a_cambiar]
     await update.message.reply_text(f"🔄 ¡Hecho! Se ha actualizado el estado de: {', '.join(ids_formateados)}.", parse_mode="Markdown")
-
+    
+    # 4. Enviamos los mensajes de feedback al usuario.
     if pasados_sin_aviso:
         await update.message.reply_text(
             f"⚠️ Nota: El/los recordatorio(s) {', '.join(pasados_sin_aviso)} que has reactivado ya ha(n) pasado. No se pueden añadir nuevos avisos.",
@@ -183,8 +178,8 @@ async def recibir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
     
     # Guardamos el nuevo aviso_previo en la DB
     with get_connection() as conn:
-        conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, recordatorio_actual["global_id"]))
-        conn.commit()
+        # CAMBIO: Placeholder a %s
+        conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (minutos, recordatorio_actual["global_id"]))
 
     # Programamos el aviso con la nueva configuración
     await programar_avisos(

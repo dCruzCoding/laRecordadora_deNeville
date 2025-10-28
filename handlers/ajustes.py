@@ -330,12 +330,12 @@ async def procesar_actualizacion_tz(update: Update, context: ContextTypes.DEFAUL
     if query.data == "tz_update_yes":
         nueva_tz = context.user_data.get("nueva_tz")
         with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET timezone = ? WHERE chat_id = ?", (nueva_tz, chat_id))
-            conn.commit()
+            # CAMBIO: Se reemplaza '?' por '%s' para compatibilidad con PostgreSQL.
+            conn.cursor().execute("UPDATE recordatorios SET timezone = %s WHERE chat_id = %s", (nueva_tz, chat_id))
         await query.edit_message_text("✅ ¡Entendido! He actualizado todos tus recordatorios a tu nueva zona horaria.")
     else: # tz_update_no
         await query.edit_message_text("👍 De acuerdo. Tus recordatorios antiguos conservarán la zona horaria con la que fueron creados.")
-    
+        
     # --- ¡LÓGICA DE EVENTOS! ---
     # Reprogramamos el resumen con la nueva TZ (si está activado)
     if get_config(chat_id, "resumen_diario_activado") == '1':

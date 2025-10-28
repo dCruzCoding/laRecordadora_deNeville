@@ -65,29 +65,30 @@ async def _procesar_id_y_avanzar(update: Update, context: ContextTypes.DEFAULT_T
         return ConversationHandler.END
 
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id, texto, fecha_hora, timezone, aviso_previo FROM recordatorios WHERE user_id = ? AND chat_id = ?", 
-            (user_id_a_editar, chat_id)
-        )
-        recordatorio = cursor.fetchone()
+        with conn.cursor() as cursor:
+            # CAMBIO: Placeholder a %s
+            cursor.execute(
+                "SELECT id, texto, fecha_hora, timezone, aviso_previo FROM recordatorios WHERE user_id = %s AND chat_id = %s", 
+                (user_id_a_editar, chat_id)
+            )
+            recordatorio = cursor.fetchone()
 
     if not recordatorio:
         await update.message.reply_text(get_text("error_no_id"))
         return ConversationHandler.END
 
     # Guardamos toda la información necesaria para los siguientes pasos.
-    global_id, texto, fecha_iso, timezone, aviso_previo = recordatorio
+    global_id, texto, fecha_utc, timezone, aviso_previo = recordatorio
     context.user_data["editar_info"] = {
         "global_id": global_id, "user_id": user_id_a_editar, "texto": texto,
-        "fecha_iso": fecha_iso, "timezone": timezone, "aviso_previo": aviso_previo
+        "fecha_utc": fecha_utc, "timezone": timezone, "aviso_previo": aviso_previo
     }
 
     # Preparamos y enviamos el menú de opciones.
     user_tz = get_config(chat_id, "user_timezone") or "UTC"
     fecha_str = "Sin fecha"
-    if fecha_iso:
-        fecha_local = convertir_utc_a_local(datetime.fromisoformat(fecha_iso), timezone or user_tz)
+    if fecha_utc:
+        fecha_local = convertir_utc_a_local(fecha_utc, timezone or user_tz)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
 
     keyboard = [
@@ -128,8 +129,10 @@ async def pedir_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAULT
     
     user_tz = get_config(update.effective_chat.id, "user_timezone") or 'UTC'
     fecha_str = "Sin fecha"
-    if info.get("fecha_iso"):
-        fecha_local = convertir_utc_a_local(datetime.fromisoformat(info["fecha_iso"]), info.get("timezone") or user_tz)
+
+    fecha_utc = info.get("fecha_utc")
+    if fecha_utc:
+        fecha_local = convertir_utc_a_local(fecha_utc, info.get("timezone") or user_tz)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
         
     mensaje = get_text("editar_pide_recordatorio_nuevo", texto_actual=info.get("texto", ""), fecha_actual=fecha_str)
@@ -151,13 +154,12 @@ async def guardar_nuevo_recordatorio(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text(get_text("error_formato"))
         return EDITAR_RECORDATORIO
 
-    fecha_iso = fecha.isoformat() if fecha else None
     with get_connection() as conn:
-        conn.execute(
-            "UPDATE recordatorios SET texto = ?, fecha_hora = ?, timezone = ? WHERE id = ?",
-            (texto, fecha_iso, user_tz, info["global_id"])
+        # CAMBIO: Placeholder a %s
+        conn.cursor().execute(
+            "UPDATE recordatorios SET texto = %s, fecha_hora = %s, timezone = %s WHERE id = %s",
+            (texto, fecha, user_tz, info["global_id"])
         )
-        conn.commit()
     
     # Reprogramamos los avisos usando el 'aviso_previo' que ya estaba guardado.
     cancelar_avisos(str(info["global_id"]))
@@ -198,12 +200,13 @@ async def pedir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     # --- LÓGICA DE VALIDACIÓN ---
     # 1. Obtenemos el estado actual desde la base de datos para estar seguros.
     with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT estado, fecha_hora FROM recordatorios WHERE id = ?", (info.get("global_id"),))
-        recordatorio_actual = cursor.fetchone()
+        with conn.cursor() as cursor:
+            # Placeholder >> %s
+            cursor.execute("SELECT estado, fecha_hora FROM recordatorios WHERE id = %s", (info.get("global_id"),))
+            recordatorio_actual = cursor.fetchone()
     
     if recordatorio_actual:
-        estado_actual, fecha_iso_actual = recordatorio_actual
+        estado_actual, fecha_utc_actual = recordatorio_actual
         
         # 2. Comprobamos si el recordatorio está hecho (estado 1).
         if estado_actual == 1:
@@ -212,12 +215,9 @@ async def pedir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             return ELEGIR_OPCION
             
         # 3. Comprobamos si la fecha ya ha pasado.
-        if fecha_iso_actual:
-            user_tz = get_config(chat_id, "user_timezone") or "UTC"
-            fecha_utc = datetime.fromisoformat(fecha_iso_actual)
-            if fecha_utc < datetime.now(pytz.utc):
+        if fecha_utc_actual:
+            if fecha_utc_actual < datetime.now(pytz.utc):
                 await context.bot.send_message(chat_id=chat_id, text=get_text("error_aviso_no_permitido"))
-                # Mantenemos la conversación en el mismo estado.
                 return ELEGIR_OPCION
 
     # Si pasa todas las validaciones, continuamos con el flujo normal.
@@ -245,24 +245,23 @@ async def guardar_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
         
     if minutos == 0:
         with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (0, info["global_id"]))
-            conn.commit()
+            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (0, info["global_id"]))
         cancelar_avisos(str(info["global_id"]))
         mensaje_confirmacion = get_text("editar_confirmacion_aviso", user_id=info["user_id"], aviso_nuevo="ninguno")
     
-    elif not info.get("fecha_iso"):
+    elif not info.get("fecha_utc"):
         await update.message.reply_text(get_text("error_aviso_sin_fecha"))
         return EDITAR_AVISO
     
     else:
-        fecha = datetime.fromisoformat(info["fecha_iso"])
+        # CAMBIO: Usamos directamente el objeto datetime guardado.
+        fecha = info["fecha_utc"]
         se_programo_aviso = await programar_avisos(
             update.effective_chat.id, str(info["global_id"]), info["user_id"], info["texto"], fecha, minutos
         )
         if se_programo_aviso:
             with get_connection() as conn:
-                conn.execute("UPDATE recordatorios SET aviso_previo = ? WHERE id = ?", (minutos, info["global_id"]))
-                conn.commit()
+                conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (minutos, info["global_id"]))
             horas, mins = divmod(minutos, 60)
             tiempo_nuevo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
             mensaje_confirmacion = get_text("editar_confirmacion_aviso", user_id=info["user_id"], aviso_nuevo=tiempo_nuevo_str)
