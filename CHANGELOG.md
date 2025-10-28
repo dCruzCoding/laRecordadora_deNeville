@@ -4,6 +4,27 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ---
 
+## [v1.7-migration-supabase] - 2025-10-28
+
+### ✨ Mejoras
+
+-   **Migración completa de la base de datos a Supabase (PostgreSQL):** Externalización BBDD de SQLite (local) a Supabase (PostgreSQL).
+    -   **Persistencia y Seguridad:** Los datos ahora residen en una base de datos cloud, eliminando el riesgo de pérdida de datos que existía al estar en un archivo local que se borraba con cada despliegue en Render.
+    -   **Refactorización de la capa de datos para compatibilidad con PostgreSQL:** Para la migración se ha adaptado el código:
+        1. Actualización de la sintaxis, sustituyendo el placeholder `?` (de SQLite) por `%s` (de `psycopg2`) en todas las consultas SQL. (2) 
+        2. Funciones de las consultas específicas de SQLite sustituidas por equivalentes en PostgreSQL (ej: `IFNULL` a `COALESCE`, `INSERT OR REPLACE` a `INSERT ... ON CONFLICT`).
+
+### 🐛 Problemas resueltos
+
+-   **_E013_ - Corrección de fallos críticos post-migración a Supabase**
+    -   **Problema (1):** El bot no podía arrancar en el servidor de producción debido a un fallo de conexión de red (`Host desconocido`) al intentar contactar con la nueva base de datos.
+    -   **Solución (1):** Se diagnosticó que los nuevos proyectos gratuitos de Supabase ya no asignan una IP pública IPv4. Se migró la estrategia de conexión para usar el **Connection Pooler** de Supabase (puerto `6543`), que sí es compatible, y se ajustó la configuración de `APScheduler` para asegurar una conexión estable.
+
+    -   **Problema (2):** Múltiples comandos (`/lista`, `/editar`, `/borrar`, `/cambiar`) y las notificaciones se caían con un `TypeError` al procesar recordatorios que incluían una fecha.
+    -   **Solución (2):** Se refactorizó todo el código que maneja fechas para tratar directamente con los objetos `datetime` nativos que `psycopg2` devuelve, eliminando las conversiones redundantes desde el formato ISO 8601 (`fromisoformat`) que causaban el error.
+
+
+
 ## [v1.6-assistant-upgrade] - 2025-09-10
 
 ### ✨ Mejoras
@@ -75,13 +96,6 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 -   **_E012_ - Corrección de precisión en el cálculo de tiempos**
     -   **Problema:** Se producía un desajuste de un minuto al posponer avisos debido a un error de cálculo al convertir los segundos restantes a minutos, que truncaba los decimales (`int()`).
     -   **Solución:** Se ha sustituido el truncamiento por un redondeo (`round()`). Este ajuste garantiza la máxima precisión y elimina cualquier inconsistencia entre la hora notificada al usuario y la mostrada en `/lista`.
-
-
-
-
-
-
-
 
 
 ### 📝 Notas de desarrollo y seguridad
@@ -238,30 +252,22 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 ---
 
 
-## 🏛️ Decisiones de Arquitectura
+## 🏛️ Decisiones de Arquitectura y Diseño
 
 Esta sección documenta algunas de las decisiones de diseño clave tomadas durante el desarrollo del proyecto.
 
-### ¿UptimeRobot (Externo) o Auto-Ping (Interno) para mantener activo el servicio de Render?
+-   **_D001 - Estrategia para mantener activo el servicio en Render_**
+    -   **Dilema:** El plan gratuito "Web Service" de Render detiene los servicios tras 15 minutos de inactividad HTTP. Para un bot de `polling` que necesita estar activo 24/7 para enviar avisos programados, esto es inaceptable. Se evaluaron dos estrategias para generar actividad constante: un "auto-ping" interno dentro del propio bot o el uso de un monitor externo.
+    -   **Decisión:** Se optó por la solución del **monitor externo (UptimeRobot)**.
+    -   **Justificación:** Aunque la solución de "auto-ping" es atractiva por ser autocontenida, tiene un fallo fundamental: elimina la capacidad de saber si el servicio se ha caído por un error interno. Si el bot crashea, el ping también muere, dejando al desarrollador a ciegas. La dependencia de un servicio externo es un pequeño precio a pagar por el inmenso beneficio de tener un sistema de monitorización y alerta imparcial. Esto asegura no solo que el bot se mantenga despierto, sino que también nos notificará si deja de funcionar por cualquier otro motivo, lo cual es crucial para la fiabilidad del servicio.
 
-#### El Dilema
-El plan gratuito "Web Service" de Render detiene (hace "spin down") los servicios tras 15 minutos de inactividad de tráfico HTTP externo. Para un bot de `polling` como "La Recordadora", que necesita estar activo 24/7 para enviar avisos programados, esto es inaceptable. Se plantearon dos alternativas para generar actividad constante:
+-   **_D002 - Uso de `psycopg2` vs. `supabase-py`_**
+    -   **Decisión:** Se optó por utilizar una conexión directa a la base de datos PostgreSQL con la librería estándar `psycopg2` en lugar del cliente oficial de Supabase (`supabase-py`).
+    -   **Justificación:**
+        1.  **Compatibilidad de Herramientas:** La librería `APScheduler`, crucial para los avisos, requiere una cadena de conexión de base de datos estándar (DSN/URI) para su `SQLAlchemyJobStore`. El cliente de Supabase no proporciona esta interfaz, lo que lo hace incompatible.
+        2.  **Modelo de Backend de Confianza:** El bot opera como un servicio de backend único y de confianza. No necesita la capa de abstracción y seguridad (RLS) que el cliente de Supabase está diseñado para proporcionar a clientes no seguros (como un navegador web). Una conexión directa es más eficiente para este caso de uso.
+        3.  **Menor Refactorización:** La lógica de la aplicación ya estaba escrita en SQL. Migrar de un dialecto SQL (SQLite) a otro (PostgreSQL) fue significativamente más sencillo que reescribir toda la la capa de datos para usar una API programática (`.select()`, `.insert()`, etc.).
 
-1.  **Auto-Ping interno:** Añadir una nueva tarea (`APScheduler` o `threading`) dentro del propio bot que hiciera una petición HTTP a su propia URL pública cada X minutos.
-2.  **Monitor externo:** Utilizar un servicio de terceros gratuito (como Uptime Robot) para que visite la URL del bot a intervalos regulares.
-
-#### Análisis y Decisión
-
-| Criterio | Auto-Ping Interno | Monitor Externo (Uptime Robot) |
-| :--- | :--- | :--- |
-| **Simplicidad de Despliegue** | ✅ **Alta** (autocontenido) | ❌ **Media** (requiere configurar un segundo servicio) |
-| **Robustez y Alertas**| ❌ **Baja** (si el bot se cae, el ping también. No hay alertas) | ✅ **Alta** (monitoriza caídas reales y envía notificaciones) |
-| **Separación de Responsabilidades** | ❌ **Baja** (mezcla lógica de bot y de infraestructura) | ✅ **Alta** (el bot es el bot, el monitor es el monitor) |
-| **Consumo de Recursos** | Mínimo, pero consume ciclos de CPU del propio bot. | Cero consumo de recursos del bot. |
-
-#### Respuesta
-Se decidió optar por la solución del **Monitor externo (Uptime Robot)**.
-
-Aunque la solución de "auto-ping" es atractiva por ser autocontenida, tiene un fallo fundamental: **elimina la capacidad de saber si el servicio se ha caído por un error interno.** Si el bot crashea, el ping también muere, dejando al desarrollador a ciegas.
-
-La dependencia de un servicio externo como Uptime Robot es un pequeño precio a pagar por el inmenso beneficio de tener un sistema de monitorización y alerta imparcial. Esto asegura no solo que el bot se mantenga despierto, sino que también nos notificará si deja de funcionar por cualquier otro motivo, lo cual es crucial para la fiabilidad del servicio.
+-   **_D003 - Desactivación de la Seguridad a Nivel de Fila (RLS)_**
+    -   **Decisión:** Se ha desactivado explícitamente la política de RLS en las tablas `recordatorios` y `configuracion` en Supabase.
+    -   **Justificación:** La seguridad y el aislamiento de los datos de los usuarios no se delegan a la base de datos, sino que **son gestionados por la lógica de la aplicación del bot**. El bot es la única entidad que tiene acceso a la base de datos, y cada consulta que realiza está diseñada para incluir siempre una cláusula `WHERE chat_id = %s`, asegurando que un usuario solo pueda ver y modificar sus propios datos. Este modelo de "backend de confianza" es estándar y seguro, siempre que la cadena de conexión a la base de datos se mantenga secreta. RLS está diseñado para un modelo de seguridad diferente, donde clientes no seguros podrían acceder a la API de la base de datos directamente.

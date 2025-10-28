@@ -21,7 +21,7 @@ __pycache__/
 # 5. Carpetas de Proyecto Específicas
 Bitacora.docx
 testing/
-HowTo/
+_HowTo/
 
 # 6. Archivos de IDEs (opcional pero recomendado)
 # Excluye carpetas de configuración de editores como VS Code.

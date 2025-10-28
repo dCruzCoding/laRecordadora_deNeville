@@ -1,111 +1,83 @@
 # La Recordadora de Neville 👵
-(Pendiente de actualización)
 
 > ¡Ay, criatura! Que no se te olvide nada. Haz como Neville y usa la Recordadora para ayudarte con todas esas cosillas importantes de la vida, ya sea desde tu ordenador o desde la nube.
 
-**La Recordadora** es un bot de Telegram multifuncional y con personalidad propia, diseñado para ser tu asistente de recordatorios personal. Este repositorio contiene el código fuente completo, optimizado para funcionar tanto en un **entorno de desarrollo local** como en un **despliegue 24/7 gratuito en la nube (Render)**.
+**La Recordadora** es un bot de Telegram multifuncional y con personalidad propia, diseñado para ser tu asistente de recordatorios personal. Este repositorio contiene el código fuente completo, construido sobre una arquitectura robusta y escalable, listo para funcionar tanto en un **entorno de desarrollo local** como en un **despliegue 24/7 en la nube**.
 
 ## ✨ Características Principales
 
 -   🌍 **Soporte Global de Zona Horaria**: Configura tu zona horaria para que los recordatorios y avisos siempre lleguen a la hora correcta, sin importar dónde estés.
+-   🌞 **Resumen Diario Proactivo**: Cada mañana, recibe un resumen con las tareas del día, totalmente personalizable en hora y estado desde `/ajustes`.
 -   🚀 **Flujo de Bienvenida Guiado**: Un proceso de *onboarding* para nuevos usuarios que presenta a la abuela, explica el funcionamiento y ayuda a realizar la configuración inicial.
--   🪄 **Creación y Edición Avanzada**: Añade recordatorios con un lenguaje natural y modifícalos en cualquier momento con el comando `/editar`, permitiendo cambiar el contenido (fecha/texto) o el aviso previo de forma separada.
--   🔔 **Avisos Previos Personalizables**: Configura notificaciones para que te lleguen minutos, horas o incluso días antes de la fecha límite.
--   📊 **Gestión de Estados Inteligente**: Los recordatorios son `Pendientes` (⬜️) o `Hechos` (✅). Aquellos cuya fecha expira se clasifican dinámicamente como "Pasados" en las listas.
+-   🪄 **Creación y Edición Avanzada**: Añade recordatorios con un lenguaje natural y modifícalos en cualquier momento con el comando `/editar`.
+-   🔔 **Notificaciones Interactivas**: Los avisos incluyen botones para posponer (`+10 min`), marcar como hecho (`✅ Hecho`) o simplemente descartar (`👌 OK`).
 -   🛡️ **Modo Seguro Configurable**: Activa mensajes de confirmación para acciones importantes como borrar o cambiar estados, evitando errores accidentales.
--   ⚙️ **Panel de Ajustes Unificado**: Gestiona todas tus preferencias (Modo Seguro, Zona Horaria) desde un único comando `/ajustes` con una interfaz de botones intuitiva.
--   🔒 **Soporte Multi-Usuario**: El bot puede ser usado por múltiples personas de forma simultánea, manteniendo los datos y configuraciones de cada uno completamente aislados y privados.
--   💾 **Persistencia Total**: Gracias a **SQLite** y **APScheduler**, los recordatorios, configuraciones y avisos programados sobreviven a los reinicios del bot.
+-   🔒 **Soporte Multi-Usuario**: El bot puede ser usado por múltiples personas de forma simultánea, manteniendo los datos de cada uno completamente aislados.
+-   💾 **Persistencia Total en la Nube**: Gracias a **Supabase (PostgreSQL)**, los recordatorios, configuraciones y avisos programados sobreviven a los reinicios y se mantienen seguros en una base de datos cloud.
 
 ## 🛠️ Tecnologías Utilizadas
 
 -   **Lenguaje**: Python 3.12+
 -   **Framework del Bot**: `python-telegram-bot`
 -   **Planificación de Tareas**: `APScheduler`
--   **Base de Datos**: `SQLite`
+-   **Base de Datos**: `PostgreSQL` (a través de **Supabase**)
+-   **Driver de Base de Datos**: `psycopg2-binary`
 -   **Análisis de Fechas**: `dateparser`
 -   **Gestión de Zonas Horarias**: `pytz` y `timezonefinderL`
 -   **Geolocalización**: `geopy`
--   **Servidor Web (para Render)**: `Flask`
+-   **Servidor Web (para Health Checks)**: `Flask`
 
-## 🚀 Guía de Instalación y Despliegue
+## 🚀 Instalación y Despliegue
+
+Este proyecto está diseñado para ser desplegado fácilmente. La configuración se gestiona a través de un archivo `.env` para el desarrollo local y variables de entorno en producción.
 
 ### Requisitos Previos
 -   Python 3.12+
 -   Git
--   Una cuenta de Telegram y un token para tu bot (obtenido de [@BotFather](https://t.me/BotFather)).
+-   Una cuenta de Telegram y un token de bot (obtenido de [@BotFather](https://t.me/BotFather)).
+-   Cuentas en [Supabase](https://supabase.com/), [Render](https://render.com/) y [UptimeRobot](https://uptimerobot.com/) (para el despliegue en la nube).
 
-### 1. Clonar y Preparar el Entorno
-```bash
-# Clona el repositorio
-git clone https://github.com/tu-usuario/La_Recordadora.git
-cd La_Recordadora
+### Configuración Rápida
+1.  Clona el repositorio.
+2.  Crea y activa un entorno virtual e instala las dependencias con `pip install -r requirements.txt`.
+3.  Crea un archivo `.env` a partir de `.env.example` y rellénalo con tus credenciales.
 
-# Crea y activa un entorno virtual
-python -m venv venv
-# En Windows: venv\Scripts\activate
-# En macOS/Linux: source venv/bin/activate
+### 📖 **Guía Completa de Despliegue**
 
-# Instala las dependencias
-pip install -r requirements.txt
-```
+Para obtener una guía detallada y paso a paso sobre cómo configurar el entorno local, la base de datos en Supabase, el despliegue en Render y el monitor de actividad en UptimeRobot, por favor, consulta el siguiente documento:
 
-### 2. Configuración (`config.py`)
-El archivo `config.py` ya está incluido y preparado. Solo necesitas configurar tu token y tu ID de Telegram.
-
-```python
-# config.py
-import os
-# ... (código del locale) ...
-
-# 1. TOKEN: Lee el token desde una variable de entorno (para Render).
-#    Si no la encuentra, usa el valor que pongas aquí (para local).
-TOKEN = os.getenv("TELEGRAM_TOKEN", "AQUI_VA_TU_TOKEN_DE_TELEGRAM")
-
-# 2. OWNER_ID: Pon aquí tu ID de usuario de Telegram.
-#    Lo puedes obtener hablando con bots como @userinfobot.
-OWNER_ID = 123456789
-```
-La base de datos (`la_recordadora.db`) y el archivo de trabajos (`jobs.sqlite`) se crearán automáticamente en la misma carpeta la primera vez que ejecutes el bot.
-
-### Opción A: Ejecución en Local
-1.  Asegúrate de haber puesto tu token y tu ID en `config.py`.
-2.  Ejecuta el bot desde la terminal:
-    ```bash
-    python main.py
-    ```
-    El bot empezará a funcionar. Para detenerlo, pulsa `Ctrl+C`.
-
-### Opción B: Despliegue en Render (Cloud 24/7)
-1.  **Sube tu código a un repositorio de GitHub.** Asegúrate de que el archivo `.gitignore` está presente para no subir las bases de datos locales (`*.db`, `*.sqlite`).
-
-2.  **Crea un "Web Service" en Render** con la siguiente configuración:
-    *   **Environment**: `Python`
-    *   **Build Command**: `pip install -r requirements.txt`
-    *   **Start Command**: `python main.py`
-    *   **Instance Type**: `Free`
-
-3.  **Configura las Variables de Entorno** en la pestaña `Environment` del servicio:
-    *   `TELEGRAM_TOKEN`: `(Pega aquí tu token de Telegram)`
-    *   `PYTHON_VERSION`: `3.12.4`
-
-4.  **Configura un Monitor de Actividad Externo** (ej: Uptime Robot):
-    *   Copia la URL pública que te da Render (ej: `https://la-recordadora.onrender.com`).
-    *   En Uptime Robot, crea un monitor `HTTP(s)` que visite esa URL cada `5 minutos`. Esto mantendrá el servicio siempre activo y evitará que Render lo "duerma".
+➡️ **[HOWTO.md - Guía de Configuración y Despliegue Completa](HOWTO.md)**
 
 ## 📖 Guía de Comandos
-
+   
 -   **/start**: Inicia la conversación con la abuela y comienza el proceso de bienvenida si es tu primera vez.
 -   **/ayuda**: Muestra la lista completa de comandos disponibles.
 -   **/info**: Vuelve a mostrar la guía de uso sobre cómo añadir y gestionar recordatorios.
--   **/lista `[filtro]`**: Muestra todos tus recordatorios. Opcionalmente, puedes filtrar por `pendientes`, `hechos`.
--   **/recordar `[fecha * texto]`**: Crea un nuevo recordatorio. El bot te guiará para añadir un aviso previo.
--   **/borrar `[ID1 ID2 ...]`**: Elimina uno o más recordatorios por su ID.
--   **/cambiar `[ID1 ID2 ...]`**: Cambia el estado de un recordatorio (de `pendiente` a `hecho` o viceversa).
+-   **/lista**: Muestra todos tus recordatorios con una interfaz interactiva.
+-   **/recordar**: Crea un nuevo recordatorio. El bot te guiará para añadir un aviso previo.
+-   **/borrar**: Inicia una conversación para eliminar uno o más recordatorios.
+-   **/cambiar**: Abre la interfaz para cambiar el estado de un recordatorio (de `pendiente` a `hecho` o viceversa).
 -   **/editar**: Inicia una conversación para modificar un recordatorio existente (contenido o aviso).
 -   **/ajustes**: Abre el panel de configuración para gestionar el modo seguro, tu zona horaria o el resumen diario.
 -   **/cancelar**: Cancela cualquier operación o conversación en curso.
 -   **/reset**: ⚠️ **(Solo para el dueño del bot)** Borra **TODOS** los recordatorios de la base de datos.
+
+### ⚡ Modo Rápido (Atajos)
+
+Para agilizar el uso, la mayoría de los comandos de gestión aceptan argumentos directamente en la misma línea, permitiéndote saltar pasos intermedios:
+
+-   **/recordar**: Puedes crear un recordatorio en un solo paso.
+    -   *Ejemplo:* `/recordar mañana a las 15:00 * Comprar ingredientes para la poción`
+
+-   **/borrar** y **/cambiar**: Puedes aplicar la acción a varios recordatorios a la vez separando sus IDs por espacios.
+    -   *Ejemplo:* `/borrar 1 5 12`
+
+-   **/editar**: Puedes especificar directamente el ID del recordatorio que quieres modificar (solo se permite un ID a la vez).
+    -   *Ejemplo:* `/editar 7`
+  
+-   **/lista**: Puedes incluir un filtro para visualizar únicamente recordatorios pendientes o sólo los que ya marcaste como hechos.
+    -   *Ejemplo:* `/lista hecho` o `/lista pendiente`
+-   
 
 ## 🏛️ Arquitectura y Versionado
 
@@ -123,9 +95,8 @@ cd La_Recordadora
 git checkout tags/v1.0-local
 ```
 
-
 ## 🛣️ Próximos Pasos (Roadmap)
 
 -   **Recordatorios Recurrentes**: Implementar la capacidad de crear recordatorios que se repitan (ej: "todos los lunes a las 9:00").
 -   **Estadísticas de Usuario**: Un comando que muestre un resumen de tareas completadas.
--   **(Largo Plazo) v2.0**: Explorar la migración a una arquitectura 100% serverless (ej: Google Cloud Run con Webhooks y Cloud Scheduler) para optimizar costes y eficiencia a gran escala.
+-   **(Largo Plazo) Explorar Alternativas a Render**: Tras probar y descartar arquitecturas *serverless* (como GCP Cloud Functions) por su incompatibilidad fundamental con componentes con estado (`ConversationHandler`, `APScheduler`), se explorará en el futuro el despliegue en **Fly.io**. Su generoso plan gratuito permite ejecutar procesos persistentes 24/7, lo que lo convierte en un candidato ideal para una solución de alojamiento gratuita y más robusta.

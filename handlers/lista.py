@@ -46,9 +46,27 @@ TITULOS = {
 # =============================================================================
 
 async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Punto de entrada para el comando /lista. Muestra la vista por defecto."""
-    await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"])
+    """
+    Punto de entrada para el comando /lista. Muestra la vista por defecto
+    o una vista filtrada si se proporcionan argumentos.
+    """
+    # NUEVO: Por defecto, mostramos los recordatorios futuros (pendientes).
+    filtro = "futuro"
 
+    # NUEVO: Comprobamos si el usuario ha escrito algo después del comando.
+    if context.args:
+        # Tomamos la primera palabra, la pasamos a minúsculas para que no importe cómo la escriba.
+        arg = context.args[0].lower()
+        
+        # Mapeamos las palabras que el usuario podría usar a nuestro filtro interno.
+        if arg in ["pasados", "hechos", "pasado", "hecho"]:
+            filtro = "pasado"
+        # Si escribe "pendientes" o cualquier otra cosa, se quedará con el filtro "futuro" por defecto.
+
+    # NUEVO: Pasamos el filtro determinado a la función que dibuja la lista.
+    await enviar_lista_interactiva(
+        update, context, context_key="lista", titulos=TITULOS["lista"], filtro=filtro
+    )
 
 async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
