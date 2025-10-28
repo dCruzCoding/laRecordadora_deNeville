@@ -8,6 +8,12 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ### ✨ Mejoras
 
+-   **Renovación integral del comando `/lista` con filtrado avanzado:** Se ha mejorado la capacidad de gestión de recordatorios.
+    -   **Navegación por Estado:** La interfaz de `/lista` ahora incluye botones (`✅ Hechos` / `⬜️ Pendientes`) que permiten filtrar los recordatorios por su estado de completado, además del filtrado temporal existente (`📜 Próximos` / `🗂️ Pasados`).
+    -   **Limpieza de Tareas Completadas:** Se ha añadido un botón `🧹 Limpiar Hechos` en la vista correspondiente, permitiendo a los usuarios archivar y borrar masivamente todas las tareas que ya han completado.
+    -   **Interfaz Optimizada:** El teclado de navegación de la lista se ha rediseñado para ser más compacto, unificando los botones de filtrado en una sola fila.
+    -   **Modo Rápido Funcional:** Ahora es posible acceder directamente a una vista filtrada usando comandos como `/lista hechos` o `/lista pasados`.
+  
 -   **Migración completa de la base de datos a Supabase (PostgreSQL):** Externalización BBDD de SQLite (local) a Supabase (PostgreSQL).
     -   **Persistencia y Seguridad:** Los datos ahora residen en una base de datos cloud, eliminando el riesgo de pérdida de datos que existía al estar en un archivo local que se borraba con cada despliegue en Render.
     -   **Refactorización de la capa de datos para compatibilidad con PostgreSQL:** Para la migración se ha adaptado el código:
@@ -15,6 +21,10 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
         2. Funciones de las consultas específicas de SQLite sustituidas por equivalentes en PostgreSQL (ej: `IFNULL` a `COALESCE`, `INSERT OR REPLACE` a `INSERT ... ON CONFLICT`).
 
 ### 🐛 Problemas resueltos
+
+-   **_E014_ - El comando `/lista` ignoraba los argumentos de filtrado**
+    -   **Problema (1):** Aunque la documentación y la ayuda del bot indicaban que se podía usar `/lista pasados` o `/lista hechos`, esta funcionalidad no estaba implementada. Siempre mostraba por defecto de recordatorios pendientes.
+    -   **Solución (1):** Se ha modificado el `CommandHandler` del comando `/lista` para que lea y procese los argumentos (`context.args`). Ahora, el bot interpreta correctamente los filtros proporcionados, como "pasados" o "hechos", y muestra la vista correspondiente, mejorando significativamente la usabilidad y la coherencia con la documentación.
 
 -   **_E013_ - Corrección de fallos críticos post-migración a Supabase**
     -   **Problema (1):** El bot no podía arrancar en el servidor de producción debido a un fallo de conexión de red (`Host desconocido`) al intentar contactar con la nueva base de datos.
@@ -54,6 +64,36 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ### 🐛 Problemas resueltos
 
+-   **_E012_ - Corrección de precisión en el cálculo de tiempos**
+    -   **Problema:** Se producía un desajuste de un minuto al posponer avisos debido a un error de cálculo al convertir los segundos restantes a minutos, que truncaba los decimales (`int()`).
+    -   **Solución:** Se ha sustituido el truncamiento por un redondeo (`round()`). Este ajuste garantiza la máxima precisión y elimina cualquier inconsistencia entre la hora notificada al usuario y la mostrada en `/lista`.
+
+-   **_E011_ - Mejoras en la funcionalidad para posponer avisos**
+    -   **Problema:** Un aviso solo se podía posponer una vez, ya que la notificación resultante no incluía de nuevo el botón para posponer. Además, la nueva hora del aviso no se reflejaba en `/lista`.
+    -   **Solución:** Se ha modificado la lógica para que los avisos pospuestos generen una notificación que también incluye el botón de posponer, permitiendo un bucle continuo. Adicionalmente, el campo `aviso_previo` ahora se recalcula y se **actualiza en la base de datos** con cada posposición, asegurando que `/lista` siempre muestre la hora del próximo aviso de forma precisa.
+  
+-   **_E010_ - Gestión del ciclo de vida y apagado local controlado (`Ctrl+C`)**
+    -   **Problema:** Al ejecutar el bot en local, la señal de interrupción (`Ctrl+C`) era capturada incorrectamente por la lógica de reinicio de errores, impidiendo un apagado limpio.
+    -   **Solución:** Se ha reestructurado el bucle principal del programa. Ahora, solo los errores de red (`NetworkError`) activan un reinicio automático. Cualquier otro `Exception` o `Ctrl+C` detiene el bot de forma predecible, mejorando la robustez y la experiencia de desarrollo.
+
+-   **_E009_ - Optimización de la navegación y mantenibilidad en `/ajustes`**
+    -   **Problema:** El botón `<< Volver` en los submenús de `/ajustes` no funcionaba y rompía la conversación debido a un `AttributeError`. Esto ocurría al reutilizar la función del comando, que esperaba una estructura de `update` diferente a la proporcionada por un botón.
+    -   **Solución:** Se ha refactorizado la lógica creando una función interna (`_build_main_menu`) dedicada a construir el menú principal. Esto elimina la duplicación de código, soluciona el error y mejora la experiencia de usuario al editar el mensaje en lugar de borrarlo y reenviarlo.
+
+-   **_E008_ - Reparación del flujo de bienvenida (`/start`)**
+    -   **Problema:** Un `AttributeError` fatal rompía el proceso de bienvenida para nuevos usuarios justo después de seleccionar el Modo Seguro, impidiendo completar la configuración.
+    -   **Solución:** Se ha corregido la obtención del `chat_id` en el `CallbackQueryHandler` correspondiente para que use `query.message.chat_id`, permitiendo que el flujo de 'onboarding' se complete sin errores.
+
+-   **_E007_ - Mejoras en la robustez de la interfaz y entradas de usuario**
+    -   **Problema (1):** La aplicación se caía con un `AttributeError` al pulsar botones en varios menús, porque el código intentaba acceder al `chat_id` desde `query.effective_chat`, que no existe en las respuestas de botones.
+    -   **Solución (1):** Se ha estandarizado el acceso al identificador del chat en todos los `CallbackQueryHandlers` para que utilicen la forma correcta: `query.message.chat_id`.
+
+    -   **Problema (2):** Las confirmaciones que requerían escribir "SI" o "NO" eran sensibles a mayúsculas y acentos, forzando al usuario a escribirlo de una única manera.
+    -   **Solución (2):** Se ha implementado el uso de una función de normalización de texto para que el bot entienda de forma flexible distintas variaciones (`Sí`, `si`, `NO`, `no`, etc.).
+
+    -   **Problema (3):** El bot generaba un `ValueError` si, al construir un teclado dinámico, una de las filas de botones quedaba vacía.
+    -   **Solución (3):** Se ha añadido una comprobación para asegurar que solo las filas que contienen botones se añadan al `InlineKeyboardMarkup` final.
+
 -   **_E006_ - Correcciones en la lógica de listas y avisos**
     -   **Problema (1):** Los recordatorios marcados como 'Hecho' (`✅`) desaparecían de la lista de pendientes antes de que su fecha expirara, lo cual resultaba confuso.
     -   **Solución (1):** Se ha ajustado la consulta a la base de datos para que los recordatorios completados permanezcan en la vista de pendientes hasta que su fecha/hora haya pasado.
@@ -66,36 +106,6 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
     -   **Problema (4):** La lista de recordatorios "Pasados" mostraba información irrelevante sobre avisos previos que ya no iban a ocurrir.
     -   **Solución (4):** Se ha añadido una comprobación en la función de formato de listas para que la línea del aviso (`🔔 Aviso a las...`) solo se muestre para recordatorios pendientes y futuros.
-
--   **_E007_ - Mejoras en la robustez de la interfaz y entradas de usuario**
-    -   **Problema (1):** La aplicación se caía con un `AttributeError` al pulsar botones en varios menús, porque el código intentaba acceder al `chat_id` desde `query.effective_chat`, que no existe en las respuestas de botones.
-    -   **Solución (1):** Se ha estandarizado el acceso al identificador del chat en todos los `CallbackQueryHandlers` para que utilicen la forma correcta: `query.message.chat_id`.
-
-    -   **Problema (2):** Las confirmaciones que requerían escribir "SI" o "NO" eran sensibles a mayúsculas y acentos, forzando al usuario a escribirlo de una única manera.
-    -   **Solución (2):** Se ha implementado el uso de una función de normalización de texto para que el bot entienda de forma flexible distintas variaciones (`Sí`, `si`, `NO`, `no`, etc.).
-
-    -   **Problema (3):** El bot generaba un `ValueError` si, al construir un teclado dinámico, una de las filas de botones quedaba vacía.
-    -   **Solución (3):** Se ha añadido una comprobación para asegurar que solo las filas que contienen botones se añadan al `InlineKeyboardMarkup` final.
-
--   **_E008_ - Reparación del flujo de bienvenida (`/start`)**
-    -   **Problema:** Un `AttributeError` fatal rompía el proceso de bienvenida para nuevos usuarios justo después de seleccionar el Modo Seguro, impidiendo completar la configuración.
-    -   **Solución:** Se ha corregido la obtención del `chat_id` en el `CallbackQueryHandler` correspondiente para que use `query.message.chat_id`, permitiendo que el flujo de 'onboarding' se complete sin errores.
-
--   **_E009_ - Optimización de la navegación y mantenibilidad en `/ajustes`**
-    -   **Problema:** El botón `<< Volver` en los submenús de `/ajustes` no funcionaba y rompía la conversación debido a un `AttributeError`. Esto ocurría al reutilizar la función del comando, que esperaba una estructura de `update` diferente a la proporcionada por un botón.
-    -   **Solución:** Se ha refactorizado la lógica creando una función interna (`_build_main_menu`) dedicada a construir el menú principal. Esto elimina la duplicación de código, soluciona el error y mejora la experiencia de usuario al editar el mensaje en lugar de borrarlo y reenviarlo.
-
--   **_E010_ - Gestión del ciclo de vida y apagado local controlado (`Ctrl+C`)**
-    -   **Problema:** Al ejecutar el bot en local, la señal de interrupción (`Ctrl+C`) era capturada incorrectamente por la lógica de reinicio de errores, impidiendo un apagado limpio.
-    -   **Solución:** Se ha reestructurado el bucle principal del programa. Ahora, solo los errores de red (`NetworkError`) activan un reinicio automático. Cualquier otro `Exception` o `Ctrl+C` detiene el bot de forma predecible, mejorando la robustez y la experiencia de desarrollo.
-
--   **_E011_ - Mejoras en la funcionalidad para posponer avisos**
-    -   **Problema:** Un aviso solo se podía posponer una vez, ya que la notificación resultante no incluía de nuevo el botón para posponer. Además, la nueva hora del aviso no se reflejaba en `/lista`.
-    -   **Solución:** Se ha modificado la lógica para que los avisos pospuestos generen una notificación que también incluye el botón de posponer, permitiendo un bucle continuo. Adicionalmente, el campo `aviso_previo` ahora se recalcula y se **actualiza en la base de datos** con cada posposición, asegurando que `/lista` siempre muestre la hora del próximo aviso de forma precisa.
-
--   **_E012_ - Corrección de precisión en el cálculo de tiempos**
-    -   **Problema:** Se producía un desajuste de un minuto al posponer avisos debido a un error de cálculo al convertir los segundos restantes a minutos, que truncaba los decimales (`int()`).
-    -   **Solución:** Se ha sustituido el truncamiento por un redondeo (`round()`). Este ajuste garantiza la máxima precisión y elimina cualquier inconsistencia entre la hora notificada al usuario y la mostrada en `/lista`.
 
 
 ### 📝 Notas de desarrollo y seguridad
@@ -172,20 +182,20 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 
 ### 🐛 Problemas resueltos
--   **_E001_**
-    - **Problema:** El teclado de `ReplyKeyboard` para la ubicación podía quedarse "pegado".
-    -   **Solución:** Se ha reestructurado el flujo para usar menús de botones `Inline` y se ha mejorado la función `manejar_cancelacion` (antigua cancelar_conversacion) para que limpie el teclado explícitamente.
--   **_E002_**
-    -   **Problema:** Mensajes de confirmación poco claros o inconsistentes.
-    -   **Solución:** Se han pulido y añadido numerosos textos al archivo `personalidad.py` para que todos los mensajes (especialmente las confirmaciones de configuración) sean claros y mantengan el tono del personaje.
--   **_E003_**
-    -   **Problema:** La conversión de zonas horarias fallaba, mostrando horas incorrectas (ej: 10:55 en lugar de 02:55).
-    -   **Diagnóstico:** Tras añadir logs de depuración, se descubrió el problema raíz: la librería `dateparser`, a pesar de la configuración, devolvía un objeto de fecha "ingenuo" (sin `tzinfo`). Al intentar convertir esta fecha ingenua a UTC, Python asumía incorrectamente la zona horaria del servidor (ej: `Europe/Madrid`) en lugar de la del usuario (ej: `Australia/Brisbane`), causando un cálculo de offset erróneo.
-    -   **Solución:** Se implementó un "parche de seguridad" en `utils.py`. Justo después de recibir la fecha de `dateparser`, el código ahora comprueba si es ingenua. Si lo es, se le "fuerza" explícitamente la zona horaria correcta del usuario (`tz.localize(fecha_naive)`) antes de proceder con cualquier conversión a UTC. Esto garantiza que la conversión siempre parta de la base correcta.
 -   **_E004_**  
     -   **Problema:** La detección de zona horaria manual a veces falla, mostrando un mensaje de "timezone_reintentar".
     -   **Diagnóstico:** Se identificó que la librería `geopy` puede fallar por timeouts de red, especialmente en el entorno de Render.
     -   **Solución:** Se ha añadido un `timeout=10` explícito a la llamada de `geopy`. Esto hace al bot más resiliente a la congestión de red, aumentando la probabilidad de éxito sin impactar negativamente en el tiempo de respuesta en condiciones normales. Además, se han añadido interacciones con el usuario en esta parte para mejorar su acompañamiento.
+-   -   **_E003_**
+    -   **Problema:** La conversión de zonas horarias fallaba, mostrando horas incorrectas (ej: 10:55 en lugar de 02:55).
+    -   **Diagnóstico:** Tras añadir logs de depuración, se descubrió el problema raíz: la librería `dateparser`, a pesar de la configuración, devolvía un objeto de fecha "ingenuo" (sin `tzinfo`). Al intentar convertir esta fecha ingenua a UTC, Python asumía incorrectamente la zona horaria del servidor (ej: `Europe/Madrid`) en lugar de la del usuario (ej: `Australia/Brisbane`), causando un cálculo de offset erróneo.
+    -   **Solución:** Se implementó un "parche de seguridad" en `utils.py`. Justo después de recibir la fecha de `dateparser`, el código ahora comprueba si es ingenua. Si lo es, se le "fuerza" explícitamente la zona horaria correcta del usuario (`tz.localize(fecha_naive)`) antes de proceder con cualquier conversión a UTC. Esto garantiza que la conversión siempre parta de la base correcta.
+-   **_E002_**
+    -   **Problema:** Mensajes de confirmación poco claros o inconsistentes.
+    -   **Solución:** Se han pulido y añadido numerosos textos al archivo `personalidad.py` para que todos los mensajes (especialmente las confirmaciones de configuración) sean claros y mantengan el tono del personaje.
+-   **_E001_**
+    - **Problema:** El teclado de `ReplyKeyboard` para la ubicación podía quedarse "pegado".
+    -   **Solución:** Se ha reestructurado el flujo para usar menús de botones `Inline` y se ha mejorado la función `manejar_cancelacion` (antigua cancelar_conversacion) para que limpie el teclado explícitamente.
 
 
 ## [v1.3-personality] - 2025-08-20

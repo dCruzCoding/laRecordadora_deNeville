@@ -82,7 +82,7 @@ def run_telegram_bot():
     # --- Handlers para Listas Interactivas (Comandos y Callbacks) ---
     app.add_handler(lista.lista_command_handler)       # /lista
     app.add_handler(lista.lista_shared_handler)        # Botones de paginación (<<, >>) y pivote (Pasados/Pendientes)
-    app.add_handler(lista.limpiar_pasados_handler)     # Botón y flujo para limpiar pasados
+    app.add_handler(lista.limpiar_handler_unificado)     # Botón y flujo para limpiar pasados/hechos
     app.add_handler(lista.placeholder_handler)         # Botones invisibles de alineación
     app.add_handler(lista.lista_cancel_handler)        # Botón universal [X] para cancelar en listas
 

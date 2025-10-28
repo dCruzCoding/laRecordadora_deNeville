@@ -75,9 +75,9 @@ Para agilizar el uso, la mayoría de los comandos de gestión aceptan argumentos
 -   **/editar**: Puedes especificar directamente el ID del recordatorio que quieres modificar (solo se permite un ID a la vez).
     -   *Ejemplo:* `/editar 7`
   
--   **/lista**: Puedes incluir un filtro para visualizar únicamente recordatorios pendientes o sólo los que ya marcaste como hechos.
+-   **/lista**: Puedes incluir un filtro para visualizar únicamente recordatorios pendientes de hacer, los hechos, los que ya pasaron o los que todavía no pasó la fecha `[hechos, futuros, pendientes, pasados]`
     -   *Ejemplo:* `/lista hecho` o `/lista pendiente`
--   
+  
 
 ## 🏛️ Arquitectura y Versionado
 

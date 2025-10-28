@@ -207,99 +207,89 @@ async def enviar_lista_interactiva(
     chat_id = update.effective_chat.id
     recordatorios_pagina, total_items = get_recordatorios(chat_id, filtro=filtro, page=page, items_per_page=ITEMS_PER_PAGE)
 
-    # --- LÓGICA PARA LISTAS VACÍAS ---
+    # --- MENSAJES PARA LISTAS VACÍAS ---
     if total_items == 0:
-        keyboard_rows = []
-        # El flag de cancelar se necesita para construir el callback_data
-        cancel_flag = "1" if mostrar_boton_cancelar else "0"
-
-        if filtro == "futuro":
-            mensaje = get_text("lista_vacia")
-            # Fila 1: Siempre ofrecemos cambiar a la otra vista.
-            keyboard_rows.append([
-                InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}")
-            ])
-        else: # filtro == "pasado"
+        if filtro == "hechos":
+            mensaje = "✅ No tienes ningún recordatorio marcado como 'Hecho'."
+        elif filtro == "pendientes":
+            mensaje = "📭 ¿No tienes nada pendiente? ¡Increíble!"
+        elif filtro == "pasado":
             mensaje = "🗂️ No tienes recordatorios PASADOS."
-            keyboard_rows.append([
-                InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}")
-            ])
-        
-        # Fila 2 (Opcional): Si estamos en un contexto que necesita cancelación, añadimos el botón.
-        if mostrar_boton_cancelar:
-            keyboard_rows.append([
-                InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel")
-            ])
-        
-        reply_markup = InlineKeyboardMarkup(keyboard_rows)
-        
-        if update.callback_query:
-            await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup)
-        else:
-            await update.message.reply_text(text=mensaje, reply_markup=reply_markup)
-        return
+        else: # filtro "futuro"
+            mensaje = get_text("lista_vacia")
+    else:
+        total_pages = ceil(total_items / ITEMS_PER_PAGE)
+        titulo = titulos.get(filtro, "📜  **RECORDATORIOS**  📜")
+        if total_pages > 1:
+            titulo += f" (Pág. {page}/{total_pages})"
+        titulo += "\n\n"
+        cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
+        mensaje = titulo + cuerpo_lista
     
-    total_pages = ceil(total_items / ITEMS_PER_PAGE)
-    
-    # Usamos los títulos del diccionario que nos pasan
-    titulo = titulos[filtro] # Accedemos al título de 'futuro' o 'pasado'
-    if total_pages > 1:
-        titulo += f" (Pág. {page}/{total_pages})"
-    titulo += "\n\n"
-        
-    cuerpo_lista = construir_mensaje_lista_completa(chat_id, recordatorios_pagina)
-    mensaje_final = titulo + cuerpo_lista
-    
-    # --- BOTONES FIJOS ---
-
-    # Creamos un "sufijo" para el callback_data que llevará toda la información de estado.
-    # El '1' o '0' al final representa el estado de mostrar_boton_cancelar.
+    # --- CONSTRUCCIÓN DEL TECLADO DINÁMICO ---
+    keyboard_rows = []
     cancel_flag = "1" if mostrar_boton_cancelar else "0"
-    callback_sufijo = f":{filtro}:{context_key}:{cancel_flag}"
+    callback_sufijo_base = f":{context_key}:{cancel_flag}"
 
-    keyboard_row = []
-    paginacion_row = []
-    
-    # Columna Izquierda: Botón "Anterior" o un placeholder
-    if page > 1:
-        paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}{callback_sufijo}"))
-    else:
-        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+    # --- Fila 1: Navegación Principal (Futuro/Pasado & Hechos/Pendientes) ---
 
-    # Columna Central: Botón de cambio de vista
-    if filtro == "futuro":
-        paginacion_row.append(InlineKeyboardButton("🗂️ PASADOS", callback_data=f"list_pivot:pasado:{context_key}:{cancel_flag}"))
-    else:
-        paginacion_row.append(InlineKeyboardButton("📜 PENDIENTES", callback_data=f"list_pivot:futuro:{context_key}:{cancel_flag}"))
+    if context_key == "lista":
+        fila_navegacion = []
+
+        # Botón 1 (Izquierda): Alterna entre la vista de Futuro (default) y Pasado.
+        # Le hemos acortado el texto a "Pendientes" para que quepa mejor.
+        if filtro == "pasado":
+            fila_navegacion.append(InlineKeyboardButton("📜 Próximos (Futuros)", callback_data=f"list_pivot:futuro{callback_sufijo_base}"))
+        else:
+            fila_navegacion.append(InlineKeyboardButton("🗂️ Pasados", callback_data=f"list_pivot:pasado{callback_sufijo_base}"))
+
+        # Botón 2 (Derecha): Alterna entre la vista de Hechos y la de Todos los Pendientes.
+        if filtro == "hechos":
+            fila_navegacion.append(InlineKeyboardButton("⬜️ Pendientes", callback_data=f"list_pivot:pendientes{callback_sufijo_base}"))
+        else:
+            fila_navegacion.append(InlineKeyboardButton("✅ Hechos", callback_data=f"list_pivot:hechos{callback_sufijo_base}"))
         
-    # Columna Derecha: Botón "Siguiente" o un placeholder
-    if page < total_pages:
-        paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}{callback_sufijo}"))
-    else:
-        paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
-        
-    keyboard_row.append(paginacion_row)
+        # Añadimos la fila con los dos botones al teclado.
+        keyboard_rows.append(fila_navegacion)
 
-    # Fila 2: Acciones (Limpiar, Cancelar)
+    # --- Fila 2: Paginación (<< y >>) ---
+    if total_items > ITEMS_PER_PAGE:
+        paginacion_row = []
+        # Botón Izquierdo: Anterior o placeholder
+        if page > 1:
+            paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}:{filtro}{callback_sufijo_base}"))
+        else:
+            paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+        
+        # Botón Derecho: Siguiente o placeholder
+        if page < total_pages:
+            paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}:{filtro}{callback_sufijo_base}"))
+        else:
+            paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+        keyboard_rows.append(paginacion_row)
+
+    # --- Fila 3: Acciones (Limpiar, Cancelar) ---
     acciones_row = []
-    if filtro == "pasado" and context_key == "lista":
-        acciones_row.append(InlineKeyboardButton("🧹 Limpiar", callback_data="limpiar_pasados_ask"))
-    
+    if context_key == "lista":
+        if filtro == "pasado":
+            # Formato: "limpiar:filtro_ask"
+            acciones_row.append(InlineKeyboardButton("🧹 Limpiar Pasados", callback_data="limpiar:pasados_ask"))
+        elif filtro == "hechos":
+            acciones_row.append(InlineKeyboardButton("🧹 Limpiar Hechos", callback_data="limpiar:hechos_ask"))
+            
     if mostrar_boton_cancelar:
         acciones_row.append(InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel"))
         
     if acciones_row:
-        keyboard_row.append(acciones_row)
+        keyboard_rows.append(acciones_row)
+    
+    reply_markup = InlineKeyboardMarkup(keyboard_rows)
 
-    reply_markup = InlineKeyboardMarkup(keyboard_row)
-
-    # El bot es lo suficientemente inteligente para saber si debe editar un mensaje
-    # existente (si la acción vino de un botón) o enviar uno nuevo.
     if update.callback_query:
         await update.callback_query.answer()
-        await update.callback_query.edit_message_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+        await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
     else:
-        await update.message.reply_text(text=mensaje_final, reply_markup=reply_markup, parse_mode="Markdown")
+        await update.message.reply_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
 
 
 

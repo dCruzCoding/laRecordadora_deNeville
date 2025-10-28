@@ -98,6 +98,14 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
             query_base = "FROM recordatorios WHERE chat_id = %s"
             params = [chat_id]
 
+            # AÑADIMOS LOS FILTROS POR ESTADO
+            if filtro == "hechos":
+                query_base += " AND estado = 1"
+                # No se añaden más parámetros
+            elif filtro == "pendientes":
+                query_base += " AND estado = 0"
+
+            # AÑADIMOS LOS FILTROS TEMPORALES 
             if filtro == "futuro":
                 query_base += " AND (fecha_hora IS NULL OR fecha_hora > %s)"
                 params.append(now_utc) # psycopg2 maneja objetos datetime directamente
@@ -127,6 +135,10 @@ def get_recordatorios(chat_id: int, filtro: str = "futuro", page: int = 1, items
             offset = (page - 1) * items_per_page
             query_select = "SELECT id, user_id, chat_id, texto, fecha_hora, estado, aviso_previo, timezone"
             query_order = "ORDER BY fecha_hora ASC"
+
+            # Si filtramos por estado, tiene más sentido ordenar por fecha de más reciente a más antiguo.
+            if filtro in ["hechos", "pendientes"]:
+                query_order = "ORDER BY fecha_hora DESC"
             
             cursor.execute(f"{query_select} {query_base} {query_order} LIMIT %s OFFSET %s", tuple(params + [items_per_page, offset]))
             recordatorios_pagina = cursor.fetchall()
@@ -139,20 +151,38 @@ def get_todos_los_chat_ids() -> List[int]:
             cursor.execute("SELECT DISTINCT chat_id FROM recordatorios UNION SELECT DISTINCT chat_id FROM configuracion")
             return [item[0] for item in cursor.fetchall()]
 
-def borrar_recordatorios_pasados(chat_id: int) -> tuple[int, List[int]]:
-    now_utc = datetime.now(pytz.utc)
+def borrar_recordatorios_por_filtro(chat_id: int, filtro: str) -> tuple[int, List[int]]:
+    """
+    Función universal para eliminar recordatorios de un usuario basándose en un filtro.
+
+    Args:
+        chat_id (int): El ID del chat del usuario.
+        filtro (str): El criterio para borrar. Puede ser "pasados" o "hechos".
+
+    Returns:
+        tuple: (Número de recordatorios borrados, Lista de IDs de los recordatorios borrados).
+    """
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            cursor.execute(
-                "SELECT id FROM recordatorios WHERE chat_id = %s AND fecha_hora IS NOT NULL AND fecha_hora <= %s",
-                (chat_id, now_utc)
-            )
+            # Construimos la consulta SQL dinámicamente según el filtro
+            if filtro == "pasados":
+                sql_where = "WHERE chat_id = %s AND fecha_hora IS NOT NULL AND fecha_hora <= %s"
+                params = (chat_id, datetime.now(pytz.utc))
+            elif filtro == "hechos":
+                sql_where = "WHERE chat_id = %s AND estado = 1"
+                params = (chat_id,)
+            else:
+                # Si se pasa un filtro no válido, no hacemos nada.
+                return 0, []
+
+            # 1. Obtenemos los IDs de los recordatorios que vamos a borrar.
+            cursor.execute(f"SELECT id {sql_where}", params)
             ids_a_borrar = [item[0] for item in cursor.fetchall()]
 
             if not ids_a_borrar:
                 return 0, []
 
-            # psycopg2 puede tomar una tupla de IDs directamente
+            # 2. Los borramos usando sus IDs.
             cursor.execute("DELETE FROM recordatorios WHERE id IN %s", (tuple(ids_a_borrar),))
             num_borrados = cursor.rowcount
 

@@ -12,7 +12,7 @@ y las acciones contextuales (Limpiar, Cancelar) para TODAS las listas del bot
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 
-from db import borrar_recordatorios_pasados
+from db import borrar_recordatorios_por_filtro
 from utils import enviar_lista_interactiva, cancelar_callback
 from avisos import cancelar_avisos
 
@@ -25,7 +25,10 @@ from avisos import cancelar_avisos
 TITULOS = {
     "lista": {
         "futuro": "📜  **RECORDATORIOS**  📜",
-        "pasado": "🗂️  **Recordatorios PASADOS**  🗂️"
+        "pasado": "🗂️  **Recordatorios PASADOS**  🗂️",
+
+        "hechos": "✅  **Recordatorios HECHOS**  ✅",
+        "pendientes": "⬜️  **Todos los PENDIENTES**  ⬜️",
     },
     "borrar": {
         "futuro": "🗑️  **BORRAR (Pendientes)**  🗑️",
@@ -50,23 +53,23 @@ async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Punto de entrada para el comando /lista. Muestra la vista por defecto
     o una vista filtrada si se proporcionan argumentos.
     """
-    # NUEVO: Por defecto, mostramos los recordatorios futuros (pendientes).
-    filtro = "futuro"
 
-    # NUEVO: Comprobamos si el usuario ha escrito algo después del comando.
+    filtro_inicial = "futuro"
+
     if context.args:
-        # Tomamos la primera palabra, la pasamos a minúsculas para que no importe cómo la escriba.
         arg = context.args[0].lower()
-        
-        # Mapeamos las palabras que el usuario podría usar a nuestro filtro interno.
-        if arg in ["pasados", "hechos", "pasado", "hecho"]:
-            filtro = "pasado"
-        # Si escribe "pendientes" o cualquier otra cosa, se quedará con el filtro "futuro" por defecto.
-
-    # NUEVO: Pasamos el filtro determinado a la función que dibuja la lista.
+        if arg in ["hechos", "hecho"]:
+            filtro_inicial = "hechos"
+        elif arg in ["pendientes", "pendiente"]:
+            filtro_inicial = "pendientes"
+        elif arg in ["pasados", "pasado"]:
+            filtro_inicial = "pasado"
+    
     await enviar_lista_interactiva(
-        update, context, context_key="lista", titulos=TITULOS["lista"], filtro=filtro
+        update, context, context_key="lista", titulos=TITULOS["lista"], filtro=filtro_inicial
     )
+
+
 
 async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
@@ -102,35 +105,47 @@ async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 
-async def limpiar_pasados_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def limpiar_callback_unificado(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
-    Maneja el flujo de confirmación para limpiar el archivo de recordatorios pasados.
+    Handler universal para los flujos de "Limpiar Pasados" y "Limpiar Hechos".
     """
     query = update.callback_query
     await query.answer()
-    action = query.data
+    
+    # Formato: "accion:filtro" -> ej: "limpiar:pasados_ask", "limpiar:hechos_confirm"
+    action, filtro_data = query.data.split(":")
+    filtro, step = filtro_data.split("_") # 'pasados', 'ask'
 
-    if action == "limpiar_pasados_ask":
+    # Textos dinámicos según el filtro
+    textos = {
+        "pasados": {"nombre": "pasados", "pregunta": "todos tus recordatorios pasados"},
+        "hechos": {"nombre": "Hechos", "pregunta": "todos tus recordatorios marcados como 'Hecho'"}
+    }
+    texto_actual = textos.get(filtro)
+    if not texto_actual: return # Filtro no válido
+
+    if step == "ask":
         keyboard = [[
-            InlineKeyboardButton("✅ Sí, bórralos", callback_data="limpiar_pasados_confirm"),
-            InlineKeyboardButton("❌ No", callback_data="limpiar_pasados_cancel")
+            InlineKeyboardButton("✅ Sí, bórralos", callback_data=f"limpiar:{filtro}_confirm"),
+            InlineKeyboardButton("❌ No", callback_data=f"limpiar:{filtro}_cancel")
         ]]
         await query.edit_message_text(
-            text="⚠️ ¿Estás seguro de que quieres **borrar permanentemente** todos tus recordatorios pasados? Esta acción no se puede deshacer.",
+            text=f"⚠️ ¿Estás seguro de que quieres **borrar permanentemente** {texto_actual['pregunta']}? Esta acción no se puede deshacer.",
             reply_markup=InlineKeyboardMarkup(keyboard),
             parse_mode="Markdown"
         )
-    elif action == "limpiar_pasados_confirm":
-        num_borrados, ids_borrados = borrar_recordatorios_pasados(update.effective_chat.id)
+    elif step == "confirm":
+        # Llamamos a nuestra nueva función universal con el filtro correcto
+        num_borrados, ids_borrados = borrar_recordatorios_por_filtro(update.effective_chat.id, filtro)
         for rid in ids_borrados:
             cancelar_avisos(str(rid))
         await query.edit_message_text(
-            text=f"🪄✨ ¡Fregotego!\n\nSe han borrado {num_borrados} recordatorios pasados de tu archivo.",
+            text=f"🪄✨ ¡Fregotego!\n\nSe han borrado {num_borrados} recordatorios '{texto_actual['nombre']}' de tu archivo.",
             parse_mode="Markdown"
         )
-    elif action == "limpiar_pasados_cancel":
-        # Si cancela, le volvemos a mostrar la lista de pasados.
-        await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"], page=1, filtro="pasado")
+    elif step == "cancel":
+        # Devolvemos al usuario a la lista de la que venía
+        await enviar_lista_interactiva(update, context, context_key="lista", titulos=TITULOS["lista"], page=1, filtro=filtro)
 
 
 async def placeholder_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -150,7 +165,7 @@ lista_command_handler = CommandHandler("lista", lista_cmd)
 lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
 
 # Handler para el flujo de limpieza de recordatorios pasados
-limpiar_pasados_handler = CallbackQueryHandler(limpiar_pasados_callback, pattern=r"^limpiar_pasados_")
+limpiar_handler_unificado = CallbackQueryHandler(limpiar_callback_unificado, pattern=r"^limpiar:")
 
 # Handler para el botón universal de cancelación [X] en las listas
 lista_cancel_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_cancel$")

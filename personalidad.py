@@ -37,9 +37,12 @@ TEXTOS: Dict[str, List[str]] = {
 
         "📜 *GESTIONAR TUS LISTAS*\n"
         "El comando /lista abre tu centro de mandos interactivo. Desde ahí, podrás:\n"
-        "  - `📜 PENDIENTES` / `🗂️ PASADOS`: Usa los botones para cambiar entre la vista de tus tareas futuras y las que ya han expirado.\n"
-        "  - `<<` y `>>`: Navega entre las páginas si tienes muchos recordatorios.\n"
-        "  - `🧹 Limpiar`: Borra todo tu archivo de pasados con un solo clic.\n\n"
+        "  - *Navegación por Vistas*: Tienes dos formas de filtrar tus recordatorios con los botones:\n"
+        "    - `📜 Pendientes` / `🗂️ Pasados`: Cambia entre la vista de tus tareas futuras y las que ya han expirado.\n"
+        "    - `✅ Hechos` / `⬜️ Pendientes`: Alterna entre ver todo lo que has completado o todo lo que te queda por hacer, sin importar la fecha.\n"
+        "  - `<<` / `>>`: Navega entre las páginas si tienes muchos recordatorios.\n"
+        "  - `🧹 Limpiar`: Cuando estés en la vista de `Pasados` o `Hechos`, aparecerá este botón para borrar todo ese archivo con un solo clic.\n"
+        "Además, puedes acceder directamente a una vista con el comando, por ejemplo: `/lista hechos` o `/lista pasados`.\n\n"
 
         "🔔 *NOTIFICACIONES INTELIGENTES*\n"
         "Cuando te llegue un aviso, ¡no es solo texto! Tendrá botones para que actúes al momento:\n"
