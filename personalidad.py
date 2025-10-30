@@ -37,8 +37,8 @@ TEXTOS: Dict[str, List[str]] = {
 
         "📜 *GESTIONAR TUS LISTAS*\n"
         "El comando /lista abre tu centro de mandos interactivo. Desde ahí, podrás:\n"
-        "  - *Navegación por Vistas*: Tienes dos formas de filtrar tus recordatorios con los botones:\n"
-        "    - `📜 Pendientes` / `🗂️ Pasados`: Cambia entre la vista de tus tareas futuras y las que ya han expirado.\n"
+        "  - *Navegación por vistas*: Tienes dos formas de filtrar tus recordatorios con los botones:\n"
+        "    - `📜 Próximos` / `🗂️ Pasados`: Cambia entre la vista de tus tareas futuras y las que ya han expirado.\n"
         "    - `✅ Hechos` / `⬜️ Pendientes`: Alterna entre ver todo lo que has completado o todo lo que te queda por hacer, sin importar la fecha.\n"
         "  - `<<` / `>>`: Navega entre las páginas si tienes muchos recordatorios.\n"
         "  - `🧹 Limpiar`: Cuando estés en la vista de `Pasados` o `Hechos`, aparecerá este botón para borrar todo ese archivo con un solo clic.\n"
@@ -106,13 +106,19 @@ TEXTOS: Dict[str, List[str]] = {
     # -------------------------------------------------------------------------
     "recordar_pide_fecha": [
         "👵📅 Venga, dime qué y para cuándo. Y no tardes. \n\nFormato: `fecha` `*` `texto`\nEj: `Mañana a las 14 * Clases de Herbología`",
+        "👵📅 A ver, cariño, dime. Aunque visto lo visto, seguro que lo olvidas igual que Neville. \n\nFormato: `fecha * texto`\nEj: `22:07 * Netflix con Luna`."
     ],
     "recordar_pide_aviso": [
         "⏳ ¿Y cuánto antes quieres que te dé el rapapolvo? ¡Decídete! \n\n(ej: `2h`, `1d`, `30m`, o `0` para ninguno).",
+        "⏳ ¿Te aviso un poco antes? Mejor prevenir que necesitar un giratiempo. \n\n*(ej: 2h, 1d, 30m, 0 para ninguno)*."
     ],
     "recordatorio_guardado": [
         "📝 ¡Apuntado! *#{id} - {texto} ({fecha})*. Más te vale que lo hagas, criatura.",
         "📝 De acuerdo. *#{id} - {texto} ({fecha})*. A ver si esta vez no se te pasa.",
+        "📝 Registrado. *#{id} - {texto} ({fecha})*. No me hagas ir a buscarte.",
+        "📝 Listo. *#{id} - {texto} ({fecha})*. ¿Por fín apuntas ir a visitar a tu abuela?.",
+        "Dios mío que pesadilla, ¿por qué le prometería a mi nieto que te ayudaría? \n\n📝 *#{id} - {texto} ({fecha})*.",
+        "¡Ay! Qué me has pillado en el baño. Espera que voy a apuntarlo. (...) \n\n📝 Vale, ya. *#{id} - {texto} ({fecha})*."
     ],
     
     # -------------------------------------------------------------------------
@@ -139,9 +145,11 @@ TEXTOS: Dict[str, List[str]] = {
     # -------------------------------------------------------------------------
     "ajustes_pide_nivel": [
         "👵 A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar?\n\nEl nivel de seguridad actual es *{nivel}*.",
+        "👵 ¿Quieres que te trate con guantes de seda o que confíe en que no vas a romper nada?. Nivel actual: *{nivel}*."
     ],
     "ajustes_confirmados": [
         "✅ Bien, ya está. He guardado tu modo de seguridad en el nivel *{nivel}* (_{descripcion}_). A ver cuánto tardas en arrepentirte.",
+        "✨ Perfecto, criatura. La configuración ha quedado fijada en nivel *{nivel}* (_{descripcion}_), por arte de magia."
     ],
     "niveles_modo_seguro": {
         "0": "Sin confirmaciones", "1": "Confirmar solo al borrar",
@@ -156,7 +164,8 @@ TEXTOS: Dict[str, List[str]] = {
     "timezone_no_encontrada": ["👵 ¡Criatura! No encuentro esa ciudad en mis mapas. ¿Estás seguro de que la has escrito bien? Inténtalo de nuevo."],
     "timezone_confirmada": ["✅ ¡Entendido! He configurado tu zona horaria a *{timezone}*."],
     "timezone_reintentar": ["De acuerdo. Venga, inténtalo de nuevo. Escríbeme otra ciudad."],
-    "timezone_buscando": ["👵 Buscando '{ciudad}' en mi bola de cristal... Dame un segundo."],
+    "timezone_buscando": ["👵 Buscando '{ciudad}' en mi bola de cristal... Dame un segundo.",
+                "👵 A ver dónde queda esa ciudad de '{ciudad}'... Un momento, estoy consultando mis mapas mágicos."],
     "ajustes_resumen_menu": [
         "🗓️ *Resumen Diario*\n\n"
         "¿Quieres que te dé un rapapolvo mañanero con tus tareas del día? Aquí puedes decidir si te molesto y a qué hora.\n\n"
@@ -169,7 +178,8 @@ TEXTOS: Dict[str, List[str]] = {
     # -------------------------------------------------------------------------
     "aviso_programado": [
         "🔔 Entendido. Te daré un grito {tiempo} antes. ¡Más te vale estar atento!",
-        "🔔 De acuerdo, te avisaré {tiempo} antes. No quiero excusas."
+        "🔔 De acuerdo, te avisaré {tiempo} antes. No quiero excusas.",
+        "🔔 Perfecto, {tiempo} antes me oirás. Y no será para darte las buenas noches."
     ],
     "aviso_no_programado": [
         "🤨 ¿Sin aviso? Muy valiente por tu parte. Espero que tu memoria no te falle como a Neville.",
@@ -178,31 +188,48 @@ TEXTOS: Dict[str, List[str]] = {
     "aviso_principal": [
         "👵⏰ ¡Es la hora de tu deber! Tienes que: *{texto}*",
         "👵⏰ ¡Espabila! Ya es la hora de: *{texto}*. Luego no digas que no te avisé.",
+        "👵⏰ ¡GRYFFINDOR! ¡Es la hora de tu deber! Tienes que: *{texto}*. ¡Haz que esta abuela se sienta orgullosa!"
     ],
     "aviso_previo": [
         "👵⚠️ ¡Atención! Dentro de {tiempo} tienes que hacer esto: *{texto}*. ¡Prepárate!",
         "👵⚠️ Que no se te olvide, en {tiempo} te toca: *{texto}*. ¡Ve acabando lo que sea que estés haciendo!",
+        "👵⚠️ Te aviso con tiempo para que no tengas excusas. En {tiempo}: '{texto}'.",
+        "👵⚠️ Dentro de {tiempo} tienes esto: '{texto}'. Y llama a tu abuela que la tienes abandonada."
     ],
     "resumen_diario_con_tareas": [
         "👵 ¡Buenos días, criatura! Más te vale no holgazanear, que para hoy tienes estas tareas:",
-        "👵 ¡Arriba, gandul! El sol ya ha salido y estas son tus obligaciones para hoy:",
+        "👵 ¡Arriba, gandul/a! El sol ya ha salido y estas son tus obligaciones para hoy:",
     ],
     
     # -------------------------------------------------------------------------
     # --- Flujo 7: Operaciones y Confirmaciones
     # -------------------------------------------------------------------------
-    "pregunta_confirmar_borrado": ["⚠️ ¿Seguro que quieres borrar {count} recordatorio(s)? Esto no se puede deshacer. Escribe 'SI' para confirmar."],
-    "pregunta_confirmar_cambio": ["⚠️ ¿Seguro que quieres cambiar el estado de {count} recordatorio(s)? Escribe 'SI' para confirmar."],
-    "confirmacion_borrado": ["🗑️ ¡Borrados los recordatorios con IDs: {ids}!"],
-    "confirmacion_cambio": ["🔄 ¡Estado cambiado para los IDs: {ids}!"],
+    "pregunta_confirmar_borrado": ["⚠️ ¿Seguro que quieres borrar {count} recordatorio(s)? Esto no se puede deshacer. Escribe 'SI' para confirmar.",
+                    "⚠️ A ver, criatura, que te conozco. ¿Seguro que quieres borrar {count} cosa(s)? Luego vienen los lloros. Escribe 'SI' para confirmar."],
+    "pregunta_confirmar_cambio": ["⚠️ ¿Seguro que quieres cambiar el estado de {count} recordatorio(s)? Escribe 'SI' para confirmar.",
+                    "⚠️ ¿Seguro que quieres cambiar el estado de {count} recordatorio(s)? A ver si lo vas a cambiar otra vez en cinco minutos... Escribe 'SI' para confirmar."],
+    "confirmacion_borrado": ["🗑️ ¡Borrados los recordatorios con IDs: {ids}!",
+                        "🗑️ ¡Wingardium Leviosa y a la basura! Los recordatorios {ids}, fuera de la lista."],
+    "confirmacion_cambio": ["🔄 ¡Estado cambiado para los IDs: {ids}!",
+        "🔄 ¡Cambiado! Pero... ¿estás seguro que querías hacer eso? (IDs: {ids})",
+        "🔄 Cambiado. Vaya, vaya… ¡si hasta pareces más organizado que Neville por un segundo!",
+        "🔄 Vale ya cambié lo que me dijiste. ¿Eran los recordatorios 94 y 95 no? Jeje es broma, éstos son los IDs: {ids}."],
     "aviso_reprogramado": ["✅ ¡Venga, te he vuelto a poner el aviso para `#{id}`! ¡Que no se te pase!"],
 
     # -------------------------------------------------------------------------
     # --- Flujo 8: Errores y Casos Límite
     # -------------------------------------------------------------------------
-    "error_formato": ["❗ ¡Así no, criatura! El formato es `fecha` `*` `texto`. ¡Concéntrate!"],
-    "error_no_id": ["⚠️ ¡Desastre! No he encontrado ningún recordatorio tuyo con esos números."],
-    "error_aviso_invalido": ["⚠️ ¿Qué formato de tiempo es ese? Usa algo que entienda, como `2h`, `1d` o `30m`."],
+    "error_formato": [
+        "❗ ¡Así no, criatura! El formato es `fecha * texto`. ¡Concéntrate!",
+        "❗ ¿Pero qué escribes? Tiene que ser `fecha * texto`. A veces pienso que te criaron los gnomos de jardín.",
+        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Pues verás en la gran batalla de Hogwarts la mismísima espada de Griffindor se le apareció y... \n\n Ay bueno, que me lío. Quiero decir que si mi nieto pudo, tu también podrás.",
+        "❗ Te has equivocado con el formato del recordatorio: `fecha * texto`. \n\nNo te preocupes, mi Neville que tanto se equivocaba llegó a ser una persona y mago maravilloso. \n\n ¿Te ha hablado de cuando derrotó al Señor Tenebroso? ¿No? Bueno, pues ahora no puedo."
+    ],
+    "error_no_id": ["⚠️ ¡Desastre! No he encontrado ningún recordatorio tuyo con esos números.",
+        "⚠️ ¿Estás seguro de ese número? Porque yo no veo nada.",
+        "⚠️ ¿Tengo que volver a decirte que hasta Neville lo hacía mejor? Porque hasta Neville lo hacía mejor."],
+    "error_aviso_invalido": ["⚠️ ¿Qué formato de tiempo es ese? Usa algo que entienda, como `2h`, `1d` o `30m`.",
+            "⚠️ Ese tiempo de aviso no vale. Pon `2h`, `1d`, `30m` o `0`. ¡Parece que estás hablando pársel!"],
     "error_nivel_invalido": ["⚠️ ¡Ese número no vale, criatura! Elige uno del 0 al 3."],
     "error_esperaba_ubicacion": ["👵 ¡Criatura, a ver si me escuchas! Te he pedido que pulses el botón de ubicación."],
     "error_esperaba_ciudad": ["👵 ¡Por las barbas de Merlín! Te he pedido el nombre de una ciudad."],
@@ -222,9 +249,12 @@ TEXTOS: Dict[str, List[str]] = {
     # -------------------------------------------------------------------------
     # --- Flujo 9: Comandos de Administrador (/reset)
     # -------------------------------------------------------------------------
-    "reset_aviso": ["🔥🔥🔥 *¡ATENCIÓN!* 🔥🔥🔥\nEstás a punto de borrarlo *TODO*. Para confirmar, escribe: `CONFIRMAR`"],
-    "reset_confirmado": ["🪄✨ ¡Hmph! Hecho. Todo borrado. Espero que sepas lo que has hecho."],
-    "reset_cancelado": ["❌ ¡Uff! Operación cancelada. Por un momento pensé que habías perdido la cabeza."],
+    "reset_aviso": ["🔥🔥🔥 *¡ATENCIÓN!* 🔥🔥🔥\nEstás a punto de borrarlo *TODO*. Para confirmar, escribe: `CONFIRMAR`",
+                        "🔥 Ay, ay… esto es lo que haría Neville cuando no entiende un hechizo. No lo hagas si no sabes lo que tocas."],
+    "reset_confirmado": ["🪄✨ ¡Hmph! Hecho. Todo borrado. Espero que sepas lo que has hecho.",
+                         "🪄✨ 🧹¡Fregotego! Ala, a juí."],
+    "reset_cancelado": ["❌ ¡Uff! Operación cancelada. Por un momento pensé que habías perdido la cabeza.",
+                    "❌ Cancelado. Menos mal… otro susto como este y acabo comparándote con Neville otra vez."],
     "reset_denegado": ["⛔ ¡Quieto ahí! Este es un comando de la abuela. ¡Tú no puedes usarlo!"],
 
     # -------------------------------------------------------------------------
