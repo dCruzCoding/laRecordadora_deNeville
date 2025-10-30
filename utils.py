@@ -63,21 +63,42 @@ def limpiar_texto_sin_fecha(texto: str, texto_fecha: str) -> str:
 def parsear_recordatorio(texto_entrada: str, user_timezone: str = 'UTC') -> Tuple[Optional[str], Optional[datetime], Optional[str]]:
     """
     Parsea una cadena de texto para extraer un recordatorio y una fecha.
-    
-    Returns:
-        Una tupla con (texto_formateado, fecha_utc, mensaje_de_error).
-        Si tiene éxito, el mensaje de error es None.
     """
     if "*" not in texto_entrada:
         return None, None, get_text("error_formato")
         
     parte_fecha, parte_texto = texto_entrada.split("*", 1)
-    parte_fecha = normalizar_hora(parte_fecha.strip())
-    
+    parte_fecha_original = parte_fecha.strip()  # Guardamos la original para limpiarla después
+
     try:
         user_tz_obj = pytz.timezone(user_timezone)
     except pytz.UnknownTimeZoneError:
         user_tz_obj = pytz.utc
+
+    now_in_user_tz = datetime.now(user_tz_obj)
+
+    # --- LÓGICA INTELIGENTE PARA ENTRADAS DE SOLO HORA ---
+    time_only_pattern = re.compile(r"^\s*(\d{1,2}:\d{2})\s*$")
+    match = time_only_pattern.match(parte_fecha_original)
+    
+    if match:
+        hora_str = match.group(1)
+        try:
+            # Parseamos la hora introducida por el usuario
+            hora_usuario = datetime.strptime(hora_str, "%H:%M").time()
+            
+            # Comparamos con la hora actual en la zona horaria del usuario
+            if hora_usuario > now_in_user_tz.time():
+                parte_fecha_procesada = f"hoy a las {hora_str}"
+            else:
+                parte_fecha_procesada = f"mañana a las {hora_str}"
+        except ValueError:
+            # En caso de una hora inválida como "25:70", dejamos que dateparser falle después
+            parte_fecha_procesada = parte_fecha_original
+    else:
+        # Si no es solo una hora, aplicamos la normalización habitual
+        parte_fecha_procesada = normalizar_hora(parte_fecha_original)
+    # -----------------------------------------------------------
     
     # Configuramos dateparser para que entienda el contexto del usuario.
     settings = {
@@ -86,19 +107,27 @@ def parsear_recordatorio(texto_entrada: str, user_timezone: str = 'UTC') -> Tupl
         # 'TIMEZONE': le dice a dateparser en qué zona horaria está pensando el usuario.
         'TIMEZONE': user_timezone,
         # 'RELATIVE_BASE': la fecha de referencia para términos como "mañana" o "en 2 horas".
-        'RELATIVE_BASE': datetime.now(user_tz_obj),
+        'RELATIVE_BASE': now_in_user_tz,
         # RETURN... True: Obliga a dateparser a devolver un objeto 'aware' en la TZ del usuario.
         'RETURN_AS_TIMEZONE_AWARE': True
     }
     
-    fechas = search_dates(parte_fecha, languages=['es'], settings=settings)
+    fechas = search_dates(parte_fecha_procesada, languages=['es'], settings=settings)
     
     if fechas:
-        texto_fecha, fecha_procesada = fechas[0]
+        texto_fecha_encontrado, fecha_procesada = fechas[0]
+
+        # Convertimos la fecha procesada a UTC para almacenarla consistentemente.
         fecha_aware = user_tz_obj.localize(fecha_procesada) if fecha_procesada.tzinfo is None else fecha_procesada
         fecha_utc = fecha_aware.astimezone(pytz.utc)
 
-        texto_final = (limpiar_texto_sin_fecha(parte_fecha, texto_fecha) + " " + parte_texto.strip()).strip()
+        # Nueva lógica de limpieza para adaptase a la nueva funcionalidad de parseo sin contexto en hora (13:30*Test)
+        if match:
+            # Si la entrada era solo una hora, el texto final es simplemente la parte del texto.
+            texto_final = parte_texto.strip()
+        else:
+            # Si no, usamos el método de limpieza original.
+            texto_final = (limpiar_texto_sin_fecha(parte_fecha_original, texto_fecha_encontrado) + " " + parte_texto.strip()).strip()
         
         # Capitalizamos solo el primer carácter, respetando mayúsculas de nombres propios.
         if texto_final:
