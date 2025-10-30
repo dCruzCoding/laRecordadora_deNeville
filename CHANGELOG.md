@@ -4,23 +4,46 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ---
 
-## [v1.7-migration-supabase] - 2025-10-28
+## [v1.7-migration-supabase] - Migración a Supabase y Mejoras de UX
 
-### ✨ Mejoras
+### [v1.7.1] - 2025-10-30
+
+#### ✨ Mejoras
+
+-   **Mejora de la experiencia de usuario (UX) en la creación de recordatorios:**
+    -   **Interpretación inteligente de la hora:** El bot ahora deduce si una hora proporcionada (ej: `14:00`) corresponde a hoy o mañana, haciendo la creación de recordatorios más rápida y natural.
+    -   **Ampliación de la personalidad:** Se han reintroducido variantes de texto en `personalidad.py` para que las interacciones sean más dinámicas.
+
+#### 🐛 Problemas resueltos
+
+-   **_E016_ - El texto del recordatorio se guardaba incorrectamente con la hora**
+    -   **Problema (1):** Al usar la nueva función de hora inteligente (ej: `/recordar 14:00 * Reunión`), el texto del recordatorio se guardaba erróneamente como "14:00 Reunión".
+    -   **Solución (1):** Se ha ajustado la función de limpieza de texto (`limpiar_texto_sin_fecha`) para que, en los casos donde la entrada es solo una hora, se ignore por completo la parte de la fecha al construir el texto final del recordatorio.
+
+-   **_E015_ - Las notificaciones principales no se enviaban en ciertos escenarios**
+    -   **Problema (1):** Los recordatorios creados **sin aviso previo** nunca se programaban en el `scheduler`, por lo que el usuario nunca recibía la notificación.
+    -   **Solución (1):** Se corrigió la lógica en el `ConversationHandler` de `/recordar` para asegurar que la llamada a la función de programación (`programar_avisos`) se ejecute siempre, incluso cuando el usuario no solicita un aviso previo.
+
+    -   **Problema (2):** Para recordatorios **con aviso previo**, al pulsar el botón `👌 OK` en la notificación del aviso, se cancelaba también la notificación principal programada.
+    -   **Solución (2):** Se ha modificado el `CallbackQueryHandler` de las notificaciones (`posponer.py`) para que la acción del botón `OK` solo descarte la notificación actual, sin cancelar los `jobs` futuros programados en el `scheduler`.
+
+### [v1.7.0] - 2025-10-28
+
+#### ✨ Mejoras
 
 -   **Renovación integral del comando `/lista` con filtrado avanzado:** Se ha mejorado la capacidad de gestión de recordatorios.
-    -   **Navegación por Estado:** La interfaz de `/lista` ahora incluye botones (`✅ Hechos` / `⬜️ Pendientes`) que permiten filtrar los recordatorios por su estado de completado, además del filtrado temporal existente (`📜 Próximos` / `🗂️ Pasados`).
-    -   **Limpieza de Tareas Completadas:** Se ha añadido un botón `🧹 Limpiar Hechos` en la vista correspondiente, permitiendo a los usuarios archivar y borrar masivamente todas las tareas que ya han completado.
-    -   **Interfaz Optimizada:** El teclado de navegación de la lista se ha rediseñado para ser más compacto, unificando los botones de filtrado en una sola fila.
-    -   **Modo Rápido Funcional:** Ahora es posible acceder directamente a una vista filtrada usando comandos como `/lista hechos` o `/lista pasados`.
+    -   **Navegación por estado:** La interfaz de `/lista` ahora incluye botones (`✅ Hechos` / `⬜️ Pendientes`) que permiten filtrar los recordatorios por su estado de completado, además del filtrado temporal existente (`📜 Próximos` / `🗂️ Pasados`).
+    -   **Limpieza de tareas completadas:** Se ha añadido un botón `🧹 Limpiar Hechos` en la vista correspondiente, permitiendo a los usuarios archivar y borrar masivamente todas las tareas que ya han completado.
+    -   **Interfaz optimizada:** El teclado de navegación de la lista se ha rediseñado para ser más compacto, unificando los botones de filtrado en una sola fila.
+    -   **Modo rápido funcional:** Ahora es posible acceder directamente a una vista filtrada usando comandos como `/lista hechos` o `/lista pasados`.
   
 -   **Migración completa de la base de datos a Supabase (PostgreSQL):** Externalización BBDD de SQLite (local) a Supabase (PostgreSQL).
-    -   **Persistencia y Seguridad:** Los datos ahora residen en una base de datos cloud, eliminando el riesgo de pérdida de datos que existía al estar en un archivo local que se borraba con cada despliegue en Render.
+    -   **Persistencia y seguridad:** Los datos ahora residen en una base de datos cloud, eliminando el riesgo de pérdida de datos que existía al estar en un archivo local que se borraba con cada despliegue en Render.
     -   **Refactorización de la capa de datos para compatibilidad con PostgreSQL:** Para la migración se ha adaptado el código:
-        1. Actualización de la sintaxis, sustituyendo el placeholder `?` (de SQLite) por `%s` (de `psycopg2`) en todas las consultas SQL. (2) 
+        1. Actualización de la sintaxis, sustituyendo el placeholder `?` (de SQLite) por `%s` (de `psycopg2`) en todas las consultas SQL.
         2. Funciones de las consultas específicas de SQLite sustituidas por equivalentes en PostgreSQL (ej: `IFNULL` a `COALESCE`, `INSERT OR REPLACE` a `INSERT ... ON CONFLICT`).
 
-### 🐛 Problemas resueltos
+#### 🐛 Problemas resueltos
 
 -   **_E014_ - El comando `/lista` ignoraba los argumentos de filtrado**
     -   **Problema (1):** Aunque la documentación y la ayuda del bot indicaban que se podía usar `/lista pasados` o `/lista hechos`, esta funcionalidad no estaba implementada. Siempre mostraba por defecto de recordatorios pendientes.
@@ -32,6 +55,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
     -   **Problema (2):** Múltiples comandos (`/lista`, `/editar`, `/borrar`, `/cambiar`) y las notificaciones se caían con un `TypeError` al procesar recordatorios que incluían una fecha.
     -   **Solución (2):** Se refactorizó todo el código que maneja fechas para tratar directamente con los objetos `datetime` nativos que `psycopg2` devuelve, eliminando las conversiones redundantes desde el formato ISO 8601 (`fromisoformat`) que causaban el error.
+
 
 
 
