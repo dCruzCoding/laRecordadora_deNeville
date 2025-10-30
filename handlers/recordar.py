@@ -65,11 +65,9 @@ async def _procesar_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TY
     fecha_iso = fecha.isoformat() if fecha else None
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            
-            # --- LÓGICA DE ID OPTIMIZADA ---
-            # CAMBIO 1: PostgreSQL usa %s en lugar de ?.
-            # CAMBIO 2: IFNULL (SQLite) se reemplaza por COALESCE (SQL estándar).
-            # CAMBIO 3: Para obtener el ID insertado en PostgreSQL, usamos 'RETURNING id'.
+
+            # --- LÓGICA DE ID ---
+            # CAMBIOS PostgreSQL: %s en lugar de ?, COALESCE en lugar de IFNULL, uso de RETURNING id.
             cursor.execute(
                 """INSERT INTO recordatorios (user_id, chat_id, texto, fecha_hora, aviso_previo, timezone) 
                    VALUES ((SELECT COALESCE(MAX(user_id), 0) + 1 FROM recordatorios WHERE chat_id = %s), %s, %s, %s, 0, %s)
@@ -108,44 +106,52 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
 
     info = context.user_data.get("recordatorio_info")
     if not info:
-        await update.message.reply_text("👵 ¡Uy! Algo se ha perdido. ¿Podemos empezar de nuevo con /recordar?")
         return ConversationHandler.END
     
-    # Caso 1: El usuario no quiere aviso.
-    if minutos == 0:
-        await update.message.reply_text(get_text("aviso_no_programado"))
-        # El 'aviso_previo' en la DB ya es 0 por defecto, no hace falta actualizar.
-        context.user_data.clear()
-        return ConversationHandler.END
-    
-    # Caso 2: El recordatorio no tiene fecha.
+    # Validación 2: El recordatorio DEBE tener fecha para programar CUALQUIER COSA.
     if not info.get("fecha"):
         await update.message.reply_text(get_text("error_aviso_sin_fecha"))
+        # Si no hay fecha, no se puede programar ni el principal ni el previo.
         return AVISO_PREVIO
     
-    # Caso 3: Intentamos programar el aviso.
-    se_programo_aviso = await programar_avisos(
+    # --- CAMBIO FUNDAMENTAL: PROGRAMAMOS PRIMERO --- ###
+    # Llamamos a programar_avisos SIEMPRE. Esta función se encargará de
+    # programar el job principal, y el previo SOLO SI minutos > 0.
+    se_programo_aviso_previo = await programar_avisos(
         update.effective_chat.id, str(info["global_id"]), info["user_id"], 
         info["texto"], info["fecha"], minutos
     )
 
-    if se_programo_aviso:
-        # Si tiene éxito, guardamos los minutos en la DB y terminamos.
-        with get_connection() as conn:
-            # CAMBIO: Placeholder a %s
-            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (minutos, info["global_id"]))
+    # --- AHORA, MANEJAMOS LOS DIFERENTES CASOS --- ###
+
+    # Caso 1: El usuario pidió un aviso (minutos > 0)
+    if minutos > 0:
+        if se_programo_aviso_previo:
+            # Éxito total: El aviso previo se programó. Guardamos en la DB y confirmamos.
+            with get_connection() as conn:
+                with conn.cursor() as cursor:
+                    cursor.execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (minutos, info["global_id"]))
             
-        horas, mins = divmod(minutos, 60)
-        tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
-        mensaje_confirmacion = get_text("aviso_programado", tiempo=tiempo_str)
-        
-        await update.message.reply_text(mensaje_confirmacion)
-        context.user_data.clear()
-        return ConversationHandler.END
-    else:
-        # Si falla (hora pasada), informamos y pedimos reintentar.
-        await update.message.reply_text(get_text("error_aviso_pasado_reintentar"))
-        return AVISO_PREVIO
+            horas, mins = divmod(minutos, 60)
+            tiempo_str = f"{horas}h" if mins == 0 else f"{horas}h {mins}m" if horas > 0 else f"{mins}m"
+            mensaje_confirmacion = get_text("aviso_programado", tiempo=tiempo_str)
+            await update.message.reply_text(mensaje_confirmacion)
+        else:
+            # Fallo: El aviso previo estaba en el pasado. Informamos y pedimos reintentar.
+            await update.message.reply_text(get_text("error_aviso_pasado_reintentar"))
+            return AVISO_PREVIO # Mantenemos al usuario en este paso.
+    
+    # Caso 2: El usuario NO quería aviso (minutos == 0)
+    else: # Esto es equivalente a 'if minutos == 0:'
+        # El recordatorio principal YA se ha programado. Simplemente informamos.
+        await update.message.reply_text(get_text("aviso_no_programado"))
+        # No hace falta tocar la DB porque 'aviso_previo' ya es 0.
+
+    # --- LIMPIEZA Y FINALIZACIÓN --- ###
+    # Si llegamos aquí, significa que el flujo ha sido exitoso.
+    context.user_data.clear()
+    return ConversationHandler.END
+
 
 
 # =============================================================================

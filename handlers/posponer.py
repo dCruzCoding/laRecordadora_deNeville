@@ -113,10 +113,7 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
         with get_connection() as conn:
             # Reseteamos el aviso_previo a 0 para que no aparezca en /lista.
             conn.cursor().execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = %s", (rid,))
-                    
-        # Cancelamos el aviso principal si aún estaba programado.
-        cancelar_avisos(rid)
-        
+                           
         # Editamos el mensaje para quitar los botones, manteniendo el texto original.
         await query.edit_message_text(text=query.message.text, reply_markup=None, parse_mode="Markdown")
 

@@ -116,8 +116,8 @@ async def enviar_recordatorio(chat_id: int, user_id: int, texto: str, rid: str):
     if bot_state.telegram_app:
         # --- CAMBIO: Limpiamos el aviso_previo al llegar la hora final ---
         with get_connection() as conn:
-            conn.execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = ?", (rid,))
-            conn.commit()
+            with conn.cursor() as cursor:
+                cursor.execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = %s", (rid,))
 
         mensaje = get_text("aviso_principal", id=user_id, texto=texto)
         keyboard = [[

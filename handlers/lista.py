@@ -11,6 +11,7 @@ y las acciones contextuales (Limpiar, Cancelar) para TODAS las listas del bot
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
+from telegram.error import BadRequest
 
 from db import borrar_recordatorios_por_filtro
 from utils import enviar_lista_interactiva, cancelar_callback
@@ -110,7 +111,17 @@ async def limpiar_callback_unificado(update: Update, context: ContextTypes.DEFAU
     Handler universal para los flujos de "Limpiar Pasados" y "Limpiar Hechos".
     """
     query = update.callback_query
-    await query.answer()
+    # --- BLOQUE DE ROBUSTEZ ---
+    try:
+        await query.answer()
+    except BadRequest as e:
+        # Si el error es porque la query es antigua, lo ignoramos y continuamos.
+        if "Query is too old" in str(e):
+            print(f"[INFO] Se ignoró un error de 'Query is too old' para el callback: {query.data}")
+            pass
+        else:
+            # Si es otro tipo de BadRequest, sí que queremos saberlo.
+            raise e
     
     # Formato: "accion:filtro" -> ej: "limpiar:pasados_ask", "limpiar:hechos_confirm"
     action, filtro_data = query.data.split(":")
