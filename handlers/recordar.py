@@ -8,33 +8,55 @@ Gestiona una conversación de dos pasos para crear un nuevo recordatorio:
 Soporta un modo rápido donde toda la información se puede dar en el comando inicial.
 """
 
+import re
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
-from db import get_connection, get_config
+from db import get_connection, get_config, add_recordatorio_fijo
 from utils import parsear_recordatorio, parsear_tiempo_a_minutos, cancelar_conversacion, convertir_utc_a_local, comando_inesperado
-from avisos import programar_avisos
+from avisos import programar_avisos, programar_recordatorio_fijo_diario
 from personalidad import get_text
 
 # --- DEFINICIÓN DE ESTADOS ---
-FECHA_TEXTO, AVISO_PREVIO = range(2)
+FECHA_TEXTO, AVISO_PREVIO , PEDIR_DATOS_FIJOS = range(3)
 
 
 # =============================================================================
 # FUNCIONES DE LA CONVERSACIÓN
 # =============================================================================
 
-async def recordar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Punto de entrada para /recordar. Dirige al modo rápido o interactivo"""
-    if context.args:
-        # Modo rápido: si ya se da la info, se salta el primer paso
-        entrada = " ".join(context.args)
-        # Delegamos a la misma función que el modo interactivo para no duplicar código
+# SECCIÓN 1: PUNTO DE ENTRADA Y DESPACHADOR
+# =============================================================================
+
+async def recordar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Punto de entrada unificado para /recordar.
+    Actúa como despachador para iniciar el flujo correcto.
+    """
+    args = context.args
+    
+    # CASO 1: El usuario quiere un recordatorio FIJO
+    if args and args[0].lower() in ["fijo", "fijos"]:
+        await update.message.reply_text(
+            "👵 Vas a fijar un recordatorio que se repetirá todos los días.\n\n"
+            "Por favor, dime la hora y el texto con el formato `HH:MM * Texto del recordatorio`.\n\n"
+            "Ejemplo: `08:30 * Tomar la poción multijugos`"
+        )
+        return PEDIR_DATOS_FIJOS
+
+    # CASO 2: El usuario quiere un recordatorio normal en MODO RÁPIDO
+    elif args:
+        entrada = " ".join(args)
         return await _procesar_fecha_texto(update, context, entrada)
+        
+    # CASO 3: El usuario quiere un recordatorio normal en MODO INTERACTIVO
     else:
-        # Modo interactivo
         await update.message.reply_text(get_text("recordar_pide_fecha"), parse_mode="Markdown")
         return FECHA_TEXTO
+
+
+# SECCIÓN 2: LÓGICA DEL RECORDATORIO NORMAL
+# =============================================================================
 
 async def recibir_fecha_texto(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Recibe la fecha y el texto del usuario en el modo interactivo."""
@@ -153,6 +175,35 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 
+# SECCIÓN 3: LÓGICA DEL RECORDATORIO FIJO
+# =============================================================================
+
+async def recibir_datos_fijos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Procesa la entrada del usuario, guarda y programa el recordatorio fijo."""
+    chat_id = update.effective_chat.id
+    entrada = update.message.text
+    match = re.match(r"^\s*(\d{1,2}:\d{2})\s*\*\s*(.+)$", entrada, re.DOTALL)
+    if not match:
+        await update.message.reply_text("❗ ¡Formato incorrecto! Recuerda usar `HH:MM * Texto`.")
+        return PEDIR_DATOS_FIJOS
+    hora_str, texto = match.groups()
+    try:
+        from datetime import datetime
+        datetime.strptime(hora_str, "%H:%M")
+    except ValueError:
+        await update.message.reply_text(f"❗ La hora '{hora_str}' no es válida. ¡Inténtalo de nuevo!")
+        return PEDIR_DATOS_FIJOS
+    user_tz = get_config(chat_id, "user_timezone") or "UTC"
+    fijo_id = add_recordatorio_fijo(chat_id, texto, hora_str, user_tz)
+    hora, minuto = map(int, hora_str.split(':'))
+    programar_recordatorio_fijo_diario(chat_id, fijo_id, texto, hora, minuto, user_tz)
+    await update.message.reply_text(
+        f"✅ ¡Entendido! He fijado un recordatorio diario para las *{hora_str}* con el texto: _{texto}_",
+        parse_mode="Markdown"
+    )
+    return ConversationHandler.END
+
+
 
 # =============================================================================
 # CONVERSATION HANDLER
@@ -161,7 +212,9 @@ recordar_handler = ConversationHandler(
     entry_points=[CommandHandler("recordar", recordar_cmd)],
     states={
         FECHA_TEXTO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_fecha_texto)],
-        AVISO_PREVIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_aviso_previo)]
+        AVISO_PREVIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_aviso_previo)],
+
+        PEDIR_DATOS_FIJOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_datos_fijos)],
     },
     fallbacks=[
         CommandHandler("cancelar", cancelar_conversacion),
