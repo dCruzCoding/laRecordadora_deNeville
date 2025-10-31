@@ -27,8 +27,8 @@ from db import crear_tablas
 import avisos
 # Se importan los módulos de handlers que contienen los objetos handler ya construidos.
 from handlers import (
-    lista, recordar, cambiar_estado, borrar, ajustes,
-    help_reset, start_onboarding, editar, posponer
+    lista, recordar, recordar_fijo, cambiar_estado, borrar, 
+    help_reset, start_onboarding, editar, posponer, ajustes
 )
 
 # =============================================================================
@@ -75,6 +75,7 @@ def run_telegram_bot():
 
     # --- Comandos de Gestión de Recordatorios ---
     app.add_handler(recordar.recordar_handler)         # /recordar
+    app.add_handler(recordar_fijo.recordar_fijo_handler) # /recordar fijo
     app.add_handler(cambiar_estado.cambiar_estado_handler) # /cambiar
     app.add_handler(borrar.borrar_handler)             # /borrar
     app.add_handler(editar.editar_handler)             # /editar

@@ -21,7 +21,7 @@ from dateparser.search import search_dates
 from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from db import get_config, get_recordatorios
+from db import get_config, get_recordatorios, get_proximos_recordatorios_fijos
 from personalidad import get_text
 
 # --- CONSTANTES ---
@@ -180,26 +180,35 @@ def convertir_utc_a_local(fecha_utc: datetime, user_timezone_str: str) -> dateti
 
 def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
     """Formatea una única línea de la lista de recordatorios, incluyendo la info del aviso."""
-    _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio = recordatorio
+    try:
+        _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio, es_fijo = recordatorio
+    except ValueError:
+        _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio = recordatorio
+        es_fijo = False
+
     lineas = []
     fecha_local = None
 
     if fecha_utc:
-        # Ya no necesitamos datetime.fromisoformat(), porque ya tenemos el objeto.
-        # Usa la zona horaria específica del recordatorio si existe, si no, la global del usuario.
         tz_para_mostrar = timezone_recordatorio or user_tz_global
         fecha_local = convertir_utc_a_local(fecha_utc, tz_para_mostrar)
         fecha_str = fecha_local.strftime("%d %b, %H:%M")
     else:
         fecha_str = "Sin fecha"
     
-    prefijo = "✅" if estado == 1 else "⬜️"
+        # --- LÓGICA DEL EMOJI ---
+    if es_fijo:
+        prefijo = "📌" # Emoji para recordatorios fijos
+    else:
+        prefijo = "✅" if estado == 1 else "⬜️" # Emojis para recordatorios normales
+
     lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
     
     # Esta parte ya estaba bien, pero la incluyo para que tengas la función completa.
     now_aware = datetime.now(pytz.timezone(user_tz_global))
 
-    if estado == 0 and fecha_local and fecha_local > now_aware and aviso_previo and aviso_previo > 0:
+    # La campanita de aviso solo se muestra para recordatorios normales y pendientes
+    if not es_fijo and estado == 0 and fecha_local and fecha_local > datetime.now(pytz.timezone(user_tz_global)) and aviso_previo and aviso_previo > 0:
         fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
         lineas.append(f"  └─ 🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}")
         
@@ -233,8 +242,30 @@ async def enviar_lista_interactiva(
     """
     Función universal para generar y enviar una lista interactiva paginada.
     """
+    from datetime import datetime
     chat_id = update.effective_chat.id
-    recordatorios_pagina, total_items = get_recordatorios(chat_id, filtro=filtro, page=page, items_per_page=ITEMS_PER_PAGE)
+
+    # 1. OBTENER AMBOS TIPOS DE RECORDATORIOS
+    recordatorios_normales, _ = get_recordatorios(chat_id, filtro=filtro, page=1, items_per_page=1000) # Obtenemos todos
+    recordatorios_fijos = []
+
+    # Los recordatorios fijos solo se muestran en las vistas de "futuro" y "pendientes"
+    if filtro in ["futuro", "pendientes"]:
+        recordatorios_fijos = get_proximos_recordatorios_fijos(chat_id)
+
+    # 2. FUSIONAR Y ORDENAR
+    lista_completa = recordatorios_normales + recordatorios_fijos
+
+
+    # Ordenamos por fecha (índice 4). Los que no tienen fecha van al final.
+    # El objeto 'datetime.max.replace(tzinfo=pytz.UTC)' es un truco para que los None se ordenen al final.
+    lista_completa.sort(key=lambda r: r[4] if r[4] else datetime.max.replace(tzinfo=pytz.utc))
+
+    # 3. PAGINACIÓN EN PYTHON
+    total_items = len(lista_completa)
+    start_index = (page - 1) * ITEMS_PER_PAGE
+    end_index = start_index + ITEMS_PER_PAGE
+    recordatorios_pagina = lista_completa[start_index:end_index]
 
     # --- MENSAJES PARA LISTAS VACÍAS ---
     if total_items == 0:

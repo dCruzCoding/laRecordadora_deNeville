@@ -35,8 +35,6 @@ def crear_tablas():
     # Usamos 'with' para asegurar que la conexión y el cursor se cierren solos.
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            # CAMBIO: La sintaxis de autoincremento en PostgreSQL es SERIAL o BIGSERIAL.
-            # BIGSERIAL es mejor para IDs que pueden crecer mucho.
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS recordatorios (
                     id BIGSERIAL PRIMARY KEY,                  -- ID único global
@@ -59,6 +57,16 @@ def crear_tablas():
                 )
             """)
             
+            # --- NUEVA TABLA PARA RECORDATORIOS FIJOS ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS recordatorios_fijos (
+                    id BIGSERIAL PRIMARY KEY,
+                    chat_id BIGINT NOT NULL,
+                    texto TEXT NOT NULL,
+                    hora_local TIME NOT NULL,      -- Tipo TIME para guardar solo la hora (ej: 14:30:00)
+                    timezone TEXT NOT NULL
+                )
+            """)
 
 
 # =============================================================================
@@ -194,3 +202,72 @@ def resetear_base_de_datos():
             # TRUNCATE es más rápido que DELETE para vaciar tablas grandes en PostgreSQL
             cursor.execute("TRUNCATE TABLE recordatorios")
     print("🧹 La tabla de recordatorios ha sido vaciada por completo.")
+
+# =============================================================================
+# FUNCIONES DE GESTIÓN DE RECORDATORIOS FIJOS
+# =============================================================================
+
+def add_recordatorio_fijo(chat_id: int, texto: str, hora_local: str, timezone: str) -> int:
+    """
+    Añade un nuevo recordatorio fijo a la base de datos y devuelve su ID.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            sql = """
+                INSERT INTO recordatorios_fijos (chat_id, texto, hora_local, timezone)
+                VALUES (%s, %s, %s, %s) RETURNING id;
+            """
+            cursor.execute(sql, (chat_id, texto, hora_local, timezone))
+            nuevo_id = cursor.fetchone()[0]
+            return nuevo_id
+        
+
+# Al final de la sección de Recordatorios Fijos en db.py
+
+def get_proximos_recordatorios_fijos(chat_id: int) -> list:
+    """
+    Obtiene los recordatorios fijos de un usuario y calcula la próxima
+    fecha de ocurrencia para cada uno.
+    """
+    from datetime import time, timedelta, datetime
+    import pytz
+
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                "SELECT id, texto, hora_local, timezone FROM recordatorios_fijos WHERE chat_id = %s",
+                (chat_id,)
+            )
+            fijos_raw = cursor.fetchall()
+
+    proximos_fijos = []
+    if not fijos_raw:
+        return []
+
+    user_tz_str = get_config(chat_id, "user_timezone") or "UTC"
+    user_tz = pytz.timezone(user_tz_str)
+    now_local = datetime.now(user_tz)
+
+    for fijo_id, texto, hora_local, timezone in fijos_raw:
+        # Crea un objeto 'time' a partir de la hora guardada
+        hora_fija = time(hora_local.hour, hora_local.minute)
+
+        # Calcula la fecha de hoy con la hora del recordatorio
+        proxima_ocurrencia_local = now_local.replace(
+            hour=hora_fija.hour, minute=hora_fija.minute, second=0, microsecond=0
+        )
+
+        # Si esa hora ya ha pasado hoy, la próxima ocurrencia es mañana
+        if proxima_ocurrencia_local < now_local:
+            proxima_ocurrencia_local += timedelta(days=1)
+
+        # Convertimos la fecha calculada a UTC para consistencia
+        proxima_ocurrencia_utc = proxima_ocurrencia_local.astimezone(pytz.utc)
+        
+        # Devolvemos una tupla con un formato compatible con los recordatorios normales
+        # (id, user_id, chat_id, texto, fecha_utc, estado, aviso_previo, timezone, es_fijo)
+        proximos_fijos.append(
+            (fijo_id, fijo_id, chat_id, texto, proxima_ocurrencia_utc, 0, 0, timezone, True)
+        )
+        
+    return proximos_fijos

@@ -167,3 +167,35 @@ def cancelar_todos_los_avisos():
     if scheduler.running:
         scheduler.remove_all_jobs()
     print("🔥 Todos los avisos programados han sido eliminados.")
+
+
+# =============================================================================
+# GESTIÓN DE RECORDATORIOS FIJOS (RECURRENTES)
+# =============================================================================
+
+def programar_recordatorio_fijo_diario(chat_id: int, fijo_id: int, texto: str, hora: int, minuto: int, timezone: str):
+    """
+    Programa un job recurrente (cron) que se ejecuta todos los días a una hora específica.
+    """
+    job_id = f"fijo_{fijo_id}"
+    scheduler.add_job(
+        enviar_recordatorio_fijo,
+        trigger='cron',
+        hour=hora,
+        minute=minuto,
+        timezone=timezone,
+        id=job_id,
+        args=[chat_id, texto],
+        replace_existing=True
+    )
+    print(f"🗓️ Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hora}:{minuto:02d} en {timezone}")
+
+async def enviar_recordatorio_fijo(chat_id: int, texto: str):
+    """
+    Función simple ejecutada por el scheduler para enviar la notificación de un recordatorio fijo.
+    """
+    if bot_state.telegram_app:
+        mensaje = f"⏰ ¡Recordatorio diario!\n\n- _{texto}_"
+        await bot_state.telegram_app.bot.send_message(
+            chat_id=chat_id, text=mensaje, parse_mode="Markdown"
+        )
