@@ -21,7 +21,7 @@ from utils import (
     enviar_lista_interactiva, parsear_recordatorio, parsear_tiempo_a_minutos, 
     cancelar_conversacion, comando_inesperado, convertir_utc_a_local
 )
-from handlers.lista import TITULOS, lista_cancel_handler
+from handlers.lista import TITULOS, lista_cancel_handler, lista_shared_callback
 from avisos import cancelar_avisos, programar_avisos
 from personalidad import get_text
 
@@ -42,8 +42,24 @@ async def editar_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
             return ConversationHandler.END
         return await _procesar_id_y_avanzar(update, context, context.args[0])
     
+    # Modo interactivo con filtrado
+    filtro_inicial = "futuro"
+    if context.args:
+        arg = context.args[0].lower()
+        if arg in ["hechos", "hecho"]:
+            filtro_inicial = "hechos"
+        elif arg in ["pasados", "pasado"]:
+            filtro_inicial = "pasado"
+        # Añadimos "pendientes" para consistencia
+        elif arg in ["pendientes", "pendiente"]:
+            filtro_inicial = "pendientes"
+
     await enviar_lista_interactiva(
-        update, context, context_key="editar", titulos=TITULOS["editar"], mostrar_boton_cancelar=True
+        update, context,
+        context_key="editar",
+        titulos=TITULOS["editar"],
+        filtro=filtro_inicial,
+        mostrar_boton_cancelar=True
     )
     return ELEGIR_ID
 
@@ -276,10 +292,19 @@ async def guardar_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
 # =============================================================================
 # CONVERSATION HANDLER
 # =============================================================================
+
+# Justo antes del ConversationHandler
+async def _navegar_lista_en_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Llama al handler de navegación de listas y mantiene el estado actual."""
+    await lista_shared_callback(update, context)
+    # Devolvemos el estado en el que queremos permanecer (elegir el ID)
+    return ELEGIR_ID
+
 editar_handler = ConversationHandler(
     entry_points=[CommandHandler("editar", editar_cmd)],
     states={
-        ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_id)],
+        ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_id),
+                    CallbackQueryHandler(_navegar_lista_en_conversacion, pattern=r"^(list_page|list_pivot):")],
         ELEGIR_OPCION: [
             CallbackQueryHandler(pedir_nuevo_recordatorio, pattern="^editar_contenido$"),
             CallbackQueryHandler(pedir_nuevo_aviso, pattern="^editar_aviso$"),

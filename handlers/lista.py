@@ -27,21 +27,26 @@ TITULOS = {
     "lista": {
         "futuro": "📜  **RECORDATORIOS**  📜",
         "pasado": "🗂️  **Recordatorios PASADOS**  🗂️",
-
         "hechos": "✅  **Recordatorios HECHOS**  ✅",
         "pendientes": "⬜️  **Todos los PENDIENTES**  ⬜️",
     },
     "borrar": {
-        "futuro": "🗑️  **BORRAR (Pendientes)**  🗑️",
-        "pasado": "🗑️  **BORRAR (Pasados)**  🗑️"
+        "futuro": "🗑️  **BORRAR (Próximos)**  🗑️",
+        "pasado": "🗑️  **BORRAR (Pasados)**  🗑️",
+        "hechos": "🗑️  **BORRAR (Hechos)**  🗑️",
+        "pendientes": "🗑️  **BORRAR (Pendientes)**  🗑️",
     },
     "editar": {
-        "futuro": "🪄  **EDITAR (Pendientes)**  🪄",
-        "pasado": "🪄  **EDITAR (Pasados)**  🪄"
+        "futuro": "🪄  **EDITAR (Próximos)**  🪄",
+        "pasado": "🪄  **EDITAR (Pasados)**  🪄",
+        "hechos": "🪄  **EDITAR (Hechos)**  🪄",
+        "pendientes": "🪄  **EDITAR (Pendientes)**  🪄",
     },
     "cambiar": {
-        "futuro": "🔄  **CAMBIAR ESTADO (Pendientes)**  🔄",
-        "pasado": "🔄  **CAMBIAR ESTADO (Pasados)**  🔄"
+        "futuro": "🔄  **CAMBIAR ESTADO (Próximos)**  🔄",
+        "pasado": "🔄  **CAMBIAR ESTADO (Pasados)**  🔄",
+        "hechos": "🔄  **CAMBIAR ESTADO (Hechos)**  🔄",
+        "pendientes": "🔄  **CAMBIAR ESTADO (Pendientes)**  🔄",
     }
 }
 

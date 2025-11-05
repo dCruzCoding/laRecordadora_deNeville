@@ -196,16 +196,14 @@ def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_globa
     else:
         fecha_str = "Sin fecha"
     
-        # --- LÓGICA DEL EMOJI ---
+    # --- LÓGICA DEL EMOJI ---
     if es_fijo:
         prefijo = "📌" # Emoji para recordatorios fijos
+        # Formato SIN ID para recordatorios fijos
+        lineas.append(f"{prefijo} {texto} ({fecha_str})")
     else:
         prefijo = "✅" if estado == 1 else "⬜️" # Emojis para recordatorios normales
-
-    lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
-    
-    # Esta parte ya estaba bien, pero la incluyo para que tengas la función completa.
-    now_aware = datetime.now(pytz.timezone(user_tz_global))
+        lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
 
     # La campanita de aviso solo se muestra para recordatorios normales y pendientes
     if not es_fijo and estado == 0 and fecha_local and fecha_local > datetime.now(pytz.timezone(user_tz_global)) and aviso_previo and aviso_previo > 0:
@@ -292,37 +290,30 @@ async def enviar_lista_interactiva(
     callback_sufijo_base = f":{context_key}:{cancel_flag}"
 
     # --- Fila 1: Navegación Principal (Futuro/Pasado & Hechos/Pendientes) ---
+    # AHORA SE AÑADE SIEMPRE, NO SOLO PARA el contexto "lista"
+    fila_navegacion = []
+    
+    if filtro == "pasado":
+        fila_navegacion.append(InlineKeyboardButton("📜 Próximos", callback_data=f"list_pivot:futuro{callback_sufijo_base}"))
+    else:
+        fila_navegacion.append(InlineKeyboardButton("🗂️ Pasados", callback_data=f"list_pivot:pasado{callback_sufijo_base}"))
 
-    if context_key == "lista":
-        fila_navegacion = []
-
-        # Botón 1 (Izquierda): Alterna entre la vista de Futuro (default) y Pasado.
-        # Le hemos acortado el texto a "Pendientes" para que quepa mejor.
-        if filtro == "pasado":
-            fila_navegacion.append(InlineKeyboardButton("📜 Próximos (Futuros)", callback_data=f"list_pivot:futuro{callback_sufijo_base}"))
-        else:
-            fila_navegacion.append(InlineKeyboardButton("🗂️ Pasados", callback_data=f"list_pivot:pasado{callback_sufijo_base}"))
-
-        # Botón 2 (Derecha): Alterna entre la vista de Hechos y la de Todos los Pendientes.
-        if filtro == "hechos":
-            fila_navegacion.append(InlineKeyboardButton("⬜️ Pendientes", callback_data=f"list_pivot:pendientes{callback_sufijo_base}"))
-        else:
-            fila_navegacion.append(InlineKeyboardButton("✅ Hechos", callback_data=f"list_pivot:hechos{callback_sufijo_base}"))
-        
-        # Añadimos la fila con los dos botones al teclado.
-        keyboard_rows.append(fila_navegacion)
+    if filtro == "hechos":
+        fila_navegacion.append(InlineKeyboardButton("⬜️ Pendientes", callback_data=f"list_pivot:pendientes{callback_sufijo_base}"))
+    else:
+        fila_navegacion.append(InlineKeyboardButton("✅ Hechos", callback_data=f"list_pivot:hechos{callback_sufijo_base}"))
+    
+    keyboard_rows.append(fila_navegacion)
 
     # --- Fila 2: Paginación (<< y >>) ---
     if total_items > ITEMS_PER_PAGE:
         paginacion_row = []
-        # Botón Izquierdo: Anterior o placeholder
         if page > 1:
             paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"list_page:{page - 1}:{filtro}{callback_sufijo_base}"))
         else:
             paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
         
-        # Botón Derecho: Siguiente o placeholder
-        if page < total_pages:
+        if page < (total_pages if 'total_pages' in locals() else 0):
             paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"list_page:{page + 1}:{filtro}{callback_sufijo_base}"))
         else:
             paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
@@ -330,14 +321,17 @@ async def enviar_lista_interactiva(
 
     # --- Fila 3: Acciones (Limpiar, Cancelar) ---
     acciones_row = []
+    # El botón "Limpiar" solo tiene sentido en el contexto de /lista
     if context_key == "lista":
         if filtro == "pasado":
-            # Formato: "limpiar:filtro_ask"
             acciones_row.append(InlineKeyboardButton("🧹 Limpiar Pasados", callback_data="limpiar:pasados_ask"))
         elif filtro == "hechos":
             acciones_row.append(InlineKeyboardButton("🧹 Limpiar Hechos", callback_data="limpiar:hechos_ask"))
             
     if mostrar_boton_cancelar:
+        # El botón de cancelar ahora se alinea a la derecha si no hay botón de limpiar
+        if not acciones_row:
+            acciones_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
         acciones_row.append(InlineKeyboardButton("❌ Cancelar", callback_data="list_cancel"))
         
     if acciones_row:

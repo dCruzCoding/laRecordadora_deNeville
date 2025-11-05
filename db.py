@@ -221,9 +221,6 @@ def add_recordatorio_fijo(chat_id: int, texto: str, hora_local: str, timezone: s
             nuevo_id = cursor.fetchone()[0]
             return nuevo_id
         
-
-# Al final de la sección de Recordatorios Fijos en db.py
-
 def get_proximos_recordatorios_fijos(chat_id: int) -> list:
     """
     Obtiene los recordatorios fijos de un usuario y calcula la próxima
@@ -271,3 +268,23 @@ def get_proximos_recordatorios_fijos(chat_id: int) -> list:
         )
         
     return proximos_fijos
+
+def get_fijos_by_chat_id(chat_id: int) -> list:
+    """Obtiene todos los recordatorios fijos de un usuario."""
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id, texto, hora_local FROM recordatorios_fijos WHERE chat_id = %s ORDER BY hora_local ASC", (chat_id,))
+            return cursor.fetchall()
+
+def update_fijo_by_id(fijo_id: int, nuevo_texto: str, nueva_hora: str):
+    """Actualiza el texto y la hora de un recordatorio fijo."""
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("UPDATE recordatorios_fijos SET texto = %s, hora_local = %s WHERE id = %s", (nuevo_texto, nueva_hora, fijo_id))
+
+def delete_fijo_by_id(fijo_id: int) -> int:
+    """Borra un recordatorio fijo por su ID y devuelve el número de filas borradas."""
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("DELETE FROM recordatorios_fijos WHERE id = %s", (fijo_id,))
+            return cursor.rowcount

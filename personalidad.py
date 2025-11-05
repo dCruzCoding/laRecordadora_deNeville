@@ -35,6 +35,11 @@ TEXTOS: Dict[str, List[str]] = {
         "`/recordar mañana a las 15:00 * Comprar ingredientes para la poción multijugos`\n"
         "Después, siempre te preguntaré si quieres un **aviso previo**.\n\n"
 
+        "📌 *TAREAS DIARIAS (RECORDATORIOS FIJOS)*\n"
+        "Para esas cosas que haces todos los días a la misma hora, usa el comando `/recordar fijo`. \n"
+        "Se abrirá un menú especial donde podrás **añadir, editar o borrar** estas tareas recurrentes. \n"
+        "Aparecerán en tu `/lista` con el emoji 📌 para que los distingas fácilmente.\n\n"
+
         "📜 *GESTIONAR TUS LISTAS*\n"
         "El comando /lista abre tu centro de mandos interactivo. Desde ahí, podrás:\n"
         "  - *Navegación por vistas*: Tienes dos formas de filtrar tus recordatorios con los botones:\n"
@@ -87,6 +92,7 @@ TEXTOS: Dict[str, List[str]] = {
         "🧙 /info – Para que te vuelva a explicar cómo usar la Recordadora.\n\n"
         "📜 /lista – Para ver y gestionar todos tus recordatorios.\n"
         "⏰ /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
+        "📌 /recordar fijo – Para gestionar esas tareas que se repiten todos los días.\n" # <-- LÍNEA AÑADIDA
         "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
         "🔄 /cambiar – Para marcar una tarea como hecha o pendiente.\n"
         "🪄 /editar – Para modificar un recordatorio que ya has creado.\n\n"

@@ -9,14 +9,14 @@ sub-flujo para permitir al usuario reprogramar un aviso.
 """
 
 from telegram import Update
-from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
+from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 from datetime import datetime
 import pytz
 
 from db import get_connection, get_config
 from utils import parsear_tiempo_a_minutos, cancelar_conversacion, comando_inesperado, enviar_lista_interactiva, normalizar_texto
 from avisos import cancelar_avisos, programar_avisos
-from handlers.lista import TITULOS, lista_cancel_handler
+from handlers.lista import TITULOS, lista_cancel_handler, lista_shared_callback
 from personalidad import get_text
 
 # --- DEFINICIÓN DE ESTADOS ---
@@ -28,11 +28,28 @@ ELEGIR_ID, CONFIRMAR_CAMBIO, REPROGRAMAR_AVISO = range(3)
 
 async def cambiar_estado_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Punto de entrada para /cambiar. Dirige al modo rápido o interactivo."""
-    if context.args:
+    # Modo rápido: si el primer argumento es un número, se procesa como ID.
+    if context.args and context.args[0].replace("#", "").isdigit():
         return await _procesar_ids_para_cambiar(update, context, context.args)
     
+    # Modo interactivo con filtrado
+    filtro_inicial = "futuro"
+    if context.args:
+        arg = context.args[0].lower()
+        if arg in ["hechos", "hecho"]:
+            filtro_inicial = "hechos"
+        elif arg in ["pasados", "pasado"]:
+            filtro_inicial = "pasado"
+        # Añadimos "pendientes" para consistencia
+        elif arg in ["pendientes", "pendiente"]:
+            filtro_inicial = "pendientes"
+    
     await enviar_lista_interactiva(
-        update, context, context_key="cambiar", titulos=TITULOS["cambiar"], mostrar_boton_cancelar=True
+        update, context,
+        context_key="cambiar",
+        titulos=TITULOS["cambiar"],
+        filtro=filtro_inicial,
+        mostrar_boton_cancelar=True
     )
     return ELEGIR_ID
 
@@ -208,7 +225,11 @@ async def recibir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
     context.user_data.clear()
     return ConversationHandler.END
 
-
+async def _navegar_lista_en_conversacion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Llama al handler de navegación de listas y mantiene el estado actual."""
+    await lista_shared_callback(update, context)
+    # Devolvemos el estado en el que queremos permanecer (elegir el ID)
+    return ELEGIR_ID
 
 # =============================================================================
 # CONVERSATION HANDLER
@@ -217,7 +238,8 @@ async def recibir_nuevo_aviso(update: Update, context: ContextTypes.DEFAULT_TYPE
 cambiar_estado_handler = ConversationHandler(
     entry_points=[CommandHandler("cambiar", cambiar_estado_cmd)],
     states={
-        ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids)],
+        ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids),
+                    CallbackQueryHandler(_navegar_lista_en_conversacion, pattern=r"^(list_page|list_pivot):")],
         CONFIRMAR_CAMBIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_cambio)],
         REPROGRAMAR_AVISO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_nuevo_aviso)]
     },

@@ -188,7 +188,7 @@ def programar_recordatorio_fijo_diario(chat_id: int, fijo_id: int, texto: str, h
         args=[chat_id, texto],
         replace_existing=True
     )
-    print(f"🗓️ Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hora}:{minuto:02d} en {timezone}")
+    print(f"🗓️   Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hora}:{minuto:02d} en {timezone}")
 
 async def enviar_recordatorio_fijo(chat_id: int, texto: str):
     """
