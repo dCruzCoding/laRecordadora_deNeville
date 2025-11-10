@@ -152,15 +152,28 @@ async def enviar_aviso_previo(chat_id: int, user_id: int, texto: str, minutos: i
 
 def cancelar_avisos(rid: str):
     """
-    Cancela todos los jobs (principal y previo) asociados a un ID de recordatorio.
-    Utiliza un try-except genérico porque el error más común (JobLookupError)
-    simplemente significa que el job ya no existía, lo cual no es un problema.
+    Cancela los jobs asociados a un ID de recordatorio.
+    Puede manejar IDs de recordatorios normales ("123") y fijos ("fijo_123").
     """
-    for job_id in [f"recordatorio_{rid}", f"aviso_{rid}"]:
+    job_ids_a_buscar = []
+
+    # Si el ID ya empieza con "fijo_", es un recordatorio fijo y solo hay un job.
+    if rid.startswith("fijo_"):
+        job_ids_a_buscar.append(rid)
+    else:
+        # Si no, es un recordatorio normal. Buscamos sus dos posibles jobs.
+        job_ids_a_buscar.append(f"recordatorio_{rid}")
+        job_ids_a_buscar.append(f"aviso_{rid}")
+
+    for job_id in job_ids_a_buscar:
         try:
-            scheduler.remove_job(job_id)
-        except Exception:
-            pass
+            # Comprobamos si el job existe antes de intentar borrarlo
+            if scheduler.get_job(job_id):
+                scheduler.remove_job(job_id)
+                print(f"🗑️  Job del scheduler cancelado: {job_id}")
+        except Exception as e:
+            # Este print es útil para depurar si algo sale mal
+            print(f"⚠️ Error al intentar cancelar el job {job_id}: {e}")
 
 def cancelar_todos_los_avisos():
     """Función de emergencia o reseteo: elimina TODOS los jobs del scheduler."""

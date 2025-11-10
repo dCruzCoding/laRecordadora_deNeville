@@ -199,9 +199,10 @@ def borrar_recordatorios_por_filtro(chat_id: int, filtro: str) -> tuple[int, Lis
 def resetear_base_de_datos():
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            # TRUNCATE es más rápido que DELETE para vaciar tablas grandes en PostgreSQL
-            cursor.execute("TRUNCATE TABLE recordatorios")
-    print("🧹 La tabla de recordatorios ha sido vaciada por completo.")
+            # Usamos TRUNCATE en ambas tablas para un borrado rápido y eficiente.
+            # CASCADE es una salvaguarda por si en el futuro se añaden dependencias.
+            cursor.execute("TRUNCATE TABLE recordatorios, recordatorios_fijos RESTART IDENTITY CASCADE")
+    print("🧹 TODOS los recordatorios han sido eliminados por completo.")
 
 # =============================================================================
 # FUNCIONES DE GESTIÓN DE RECORDATORIOS FIJOS
@@ -276,6 +277,13 @@ def get_fijos_by_chat_id(chat_id: int) -> list:
             cursor.execute("SELECT id, texto, hora_local FROM recordatorios_fijos WHERE chat_id = %s ORDER BY hora_local ASC", (chat_id,))
             return cursor.fetchall()
 
+def check_fijo_exists(fijo_id: int, chat_id: int) -> bool:
+    """Verifica si un recordatorio fijo existe y pertenece al usuario especificado."""
+    with get_connection() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute("SELECT id FROM recordatorios_fijos WHERE id = %s AND chat_id = %s", (fijo_id, chat_id))
+            return cursor.fetchone() is not None
+        
 def update_fijo_by_id(fijo_id: int, nuevo_texto: str, nueva_hora: str):
     """Actualiza el texto y la hora de un recordatorio fijo."""
     with get_connection() as conn:

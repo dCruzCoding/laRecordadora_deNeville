@@ -8,7 +8,7 @@ from telegram.ext import (
 
 from db import (
     get_config, add_recordatorio_fijo, get_fijos_by_chat_id,
-    update_fijo_by_id, delete_fijo_by_id
+    update_fijo_by_id, delete_fijo_by_id, check_fijo_exists
 )
 from utils import cancelar_conversacion, comando_inesperado
 from avisos import programar_recordatorio_fijo_diario, cancelar_avisos
@@ -58,7 +58,7 @@ async def _mostrar_lista_fijos(update: Update, context: ContextTypes.DEFAULT_TYP
 async def fijo_pide_datos_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("➕ **Añadir Recordatorio Fijo**", parse_mode="Markdown")
+    await query.edit_message_text("➕ **Añadir Recordatorio fijo**", parse_mode="Markdown")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
         text="Escribe la hora y el texto para tu nuevo recordatorio.\n\nFormato: `HH:MM * Texto`",
@@ -83,7 +83,7 @@ async def fijo_recibe_datos_add(update: Update, context: ContextTypes.DEFAULT_TY
 async def fijo_pide_id_borrar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("🗑️ **Borrar Recordatorio Fijo**", parse_mode="Markdown")
+    await query.edit_message_text("🗑️ **Borrar Recordatorio fijo**", parse_mode="Markdown")
     if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo que quieres borrar:"):
         return ELEGIR_ID_BORRAR_FIJO
     return ConversationHandler.END
@@ -106,15 +106,32 @@ async def fijo_ejecuta_borrado(update: Update, context: ContextTypes.DEFAULT_TYP
 async def fijo_pide_id_editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("✍️ **Editar Recordatorio Fijo**", parse_mode="Markdown")
+    await query.edit_message_text("✍️ **Editar Recordatorio fijo**", parse_mode="Markdown")
     if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo a editar:"):
         return ELEGIR_ID_EDITAR_FIJO
     return ConversationHandler.END
 
 async def fijo_pide_nuevos_datos(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["fijo_id_a_editar"] = int(update.message.text.strip().replace("#", ""))
-    await update.message.reply_text("Ahora, escribe la nueva hora y texto: `HH:MM * Texto`.")
-    return RECIBIR_NUEVOS_DATOS_FIJOS
+    """
+    Valida el ID proporcionado por el usuario. Si es válido, pide los nuevos datos.
+    Si no, informa del error y le permite intentarlo de nuevo.
+    """
+    chat_id = update.effective_chat.id
+    try:
+        fijo_id = int(update.message.text.strip().replace("#", ""))
+    except ValueError:
+        await update.message.reply_text("Eso no es un número válido. Por favor, dime el ID del recordatorio que quieres editar:")
+        return ELEGIR_ID_EDITAR_FIJO # Mantenemos al usuario en el paso de elegir ID
+
+    if check_fijo_exists(fijo_id, chat_id):
+        # El ID es válido y pertenece al usuario, procedemos.
+        context.user_data["fijo_id_a_editar"] = fijo_id
+        await update.message.reply_text("Entendido. Ahora, escribe la nueva hora y texto con el formato `HH:MM * Texto`.")
+        return RECIBIR_NUEVOS_DATOS_FIJOS
+    else:
+        # El ID no existe o no pertenece al usuario.
+        await update.message.reply_text(f"❌ No he encontrado ningún recordatorio fijo con el ID #{fijo_id}. Prueba de nuevo.")
+        return ELEGIR_ID_EDITAR_FIJO # Devolvemos al usuario al paso anterior
 
 async def fijo_ejecuta_edicion(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     fijo_id = context.user_data.get("fijo_id_a_editar")
