@@ -57,14 +57,15 @@ def crear_tablas():
                 )
             """)
             
-            # --- NUEVA TABLA PARA RECORDATORIOS FIJOS ---
+            # --- TABLA PARA RECORDATORIOS FIJOS ---
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS recordatorios_fijos (
                     id BIGSERIAL PRIMARY KEY,
                     chat_id BIGINT NOT NULL,
                     texto TEXT NOT NULL,
-                    hora_local TIME NOT NULL,      -- Tipo TIME para guardar solo la hora (ej: 14:30:00)
-                    timezone TEXT NOT NULL
+                    hora_local TIME NOT NULL,
+                    timezone TEXT NOT NULL,
+                    dias_semana TEXT NOT NULL DEFAULT 'mon,tue,wed,thu,fri,sat,sun' -- Por defecto, todos los días
                 )
             """)
 
@@ -208,17 +209,17 @@ def resetear_base_de_datos():
 # FUNCIONES DE GESTIÓN DE RECORDATORIOS FIJOS
 # =============================================================================
 
-def add_recordatorio_fijo(chat_id: int, texto: str, hora_local: str, timezone: str) -> int:
+def add_recordatorio_fijo(chat_id: int, texto: str, hora_local: str, timezone: str, dias_semana: str) -> int:
     """
     Añade un nuevo recordatorio fijo a la base de datos y devuelve su ID.
     """
     with get_connection() as conn:
         with conn.cursor() as cursor:
             sql = """
-                INSERT INTO recordatorios_fijos (chat_id, texto, hora_local, timezone)
-                VALUES (%s, %s, %s, %s) RETURNING id;
+                INSERT INTO recordatorios_fijos (chat_id, texto, hora_local, timezone, dias_semana)
+                VALUES (%s, %s, %s, %s, %s) RETURNING id;
             """
-            cursor.execute(sql, (chat_id, texto, hora_local, timezone))
+            cursor.execute(sql, (chat_id, texto, hora_local, timezone, dias_semana))
             nuevo_id = cursor.fetchone()[0]
             return nuevo_id
         
@@ -233,7 +234,7 @@ def get_proximos_recordatorios_fijos(chat_id: int) -> list:
     with get_connection() as conn:
         with conn.cursor() as cursor:
             cursor.execute(
-                "SELECT id, texto, hora_local, timezone FROM recordatorios_fijos WHERE chat_id = %s",
+                "SELECT id, texto, hora_local, timezone, dias_semana FROM recordatorios_fijos WHERE chat_id = %s",
                 (chat_id,)
             )
             fijos_raw = cursor.fetchall()
@@ -246,35 +247,37 @@ def get_proximos_recordatorios_fijos(chat_id: int) -> list:
     user_tz = pytz.timezone(user_tz_str)
     now_local = datetime.now(user_tz)
 
-    for fijo_id, texto, hora_local, timezone in fijos_raw:
-        # Crea un objeto 'time' a partir de la hora guardada
-        hora_fija = time(hora_local.hour, hora_local.minute)
+    # Mapeo de nombre de día a número (Lunes=0, Domingo=6)
+    dias_map = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
-        # Calcula la fecha de hoy con la hora del recordatorio
-        proxima_ocurrencia_local = now_local.replace(
-            hour=hora_fija.hour, minute=hora_fija.minute, second=0, microsecond=0
-        )
+    for fijo_id, texto, hora_local, timezone, dias_semana in fijos_raw:
+        dias_activos = {dias_map[dia] for dia in dias_semana.split(',')}
+        hora_fija = time(hora_local.hour, hora_local.minute)   # Crea un objeto 'time' a partir de la hora guardada
 
-        # Si esa hora ya ha pasado hoy, la próxima ocurrencia es mañana
-        if proxima_ocurrencia_local < now_local:
-            proxima_ocurrencia_local += timedelta(days=1)
-
-        # Convertimos la fecha calculada a UTC para consistencia
-        proxima_ocurrencia_utc = proxima_ocurrencia_local.astimezone(pytz.utc)
-        
-        # Devolvemos una tupla con un formato compatible con los recordatorios normales
-        # (id, user_id, chat_id, texto, fecha_utc, estado, aviso_previo, timezone, es_fijo)
-        proximos_fijos.append(
-            (fijo_id, fijo_id, chat_id, texto, proxima_ocurrencia_utc, 0, 0, timezone, True)
-        )
-        
+        # Iteramos los próximos 7 días para encontrar la siguiente ocurrencia
+        for i in range(8):
+            dia_a_comprobar = now_local + timedelta(days=i)
+            
+            # Si el día de la semana está en los días activos...
+            if dia_a_comprobar.weekday() in dias_activos:
+                proxima_ocurrencia_local = dia_a_comprobar.replace(
+                    hour=hora_fija.hour, minute=hora_fija.minute, second=0, microsecond=0
+                )
+                # ...y si esa fecha/hora es en el futuro, hemos encontrado la próxima ocurrencia
+                if proxima_ocurrencia_local > now_local:
+                    proxima_ocurrencia_utc = proxima_ocurrencia_local.astimezone(pytz.utc)
+                    proximos_fijos.append(
+                        (fijo_id, fijo_id, chat_id, texto, proxima_ocurrencia_utc, 0, 0, timezone, True)
+                    )
+                    break # Salimos del bucle y vamos al siguiente recordatorio fijo
+                    
     return proximos_fijos
 
 def get_fijos_by_chat_id(chat_id: int) -> list:
     """Obtiene todos los recordatorios fijos de un usuario."""
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            cursor.execute("SELECT id, texto, hora_local FROM recordatorios_fijos WHERE chat_id = %s ORDER BY hora_local ASC", (chat_id,))
+            cursor.execute("SELECT id, texto, hora_local, dias_semana FROM recordatorios_fijos WHERE chat_id = %s ORDER BY hora_local ASC", (chat_id,))
             return cursor.fetchall()
 
 def check_fijo_exists(fijo_id: int, chat_id: int) -> bool:
@@ -284,12 +287,14 @@ def check_fijo_exists(fijo_id: int, chat_id: int) -> bool:
             cursor.execute("SELECT id FROM recordatorios_fijos WHERE id = %s AND chat_id = %s", (fijo_id, chat_id))
             return cursor.fetchone() is not None
         
-def update_fijo_by_id(fijo_id: int, nuevo_texto: str, nueva_hora: str):
+def update_fijo_by_id(fijo_id: int, nuevo_texto: str, nueva_hora: str, nuevos_dias: str):
     """Actualiza el texto y la hora de un recordatorio fijo."""
     with get_connection() as conn:
         with conn.cursor() as cursor:
-            cursor.execute("UPDATE recordatorios_fijos SET texto = %s, hora_local = %s WHERE id = %s", (nuevo_texto, nueva_hora, fijo_id))
-
+            cursor.execute(
+                "UPDATE recordatorios_fijos SET texto = %s, hora_local = %s, dias_semana = %s WHERE id = %s",
+                (nuevo_texto, nueva_hora, nuevos_dias, fijo_id)
+            )
 def delete_fijo_by_id(fijo_id: int) -> int:
     """Borra un recordatorio fijo por su ID y devuelve el número de filas borradas."""
     with get_connection() as conn:

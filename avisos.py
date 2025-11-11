@@ -186,7 +186,7 @@ def cancelar_todos_los_avisos():
 # GESTIÓN DE RECORDATORIOS FIJOS (RECURRENTES)
 # =============================================================================
 
-def programar_recordatorio_fijo_diario(chat_id: int, fijo_id: int, texto: str, hora: int, minuto: int, timezone: str):
+def programar_recordatorio_fijo_diario(chat_id: int, fijo_id: int, texto: str, hora: int, minuto: int, timezone: str, dias_semana_str: str):
     """
     Programa un job recurrente (cron) que se ejecuta todos los días a una hora específica.
     """
@@ -196,12 +196,13 @@ def programar_recordatorio_fijo_diario(chat_id: int, fijo_id: int, texto: str, h
         trigger='cron',
         hour=hora,
         minute=minuto,
+        day_of_week=dias_semana_str,
         timezone=timezone,
         id=job_id,
         args=[chat_id, texto],
         replace_existing=True
     )
-    print(f"🗓️   Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hora}:{minuto:02d} en {timezone}")
+    print(f"🗓️   Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hora}:{minuto:02d} ({dias_semana_str}) en {timezone}")
 
 async def enviar_recordatorio_fijo(chat_id: int, texto: str):
     """
