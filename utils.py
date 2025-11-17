@@ -257,7 +257,7 @@ def build_full_list_message(chat_id: int, reminders: List) -> str:
 
 async def send_interactive_list(
     update: Update, context: ContextTypes.DEFAULT_TYPE, context_key: str,
-    titles: dict, page: int = 1, filter_type: str = "futuro",
+    titles: dict, page: int = 1, filter_type: str = "future",
     show_cancel_button: bool = False
 ):
     """
@@ -270,11 +270,11 @@ async def send_interactive_list(
 
     # --- MENSAJES PARA LISTAS VACÍAS ---
     if total_items == 0:
-        if filter_type    == "hechos":
+        if filter_type    == "done":
             message = "✅ No tienes ningún recordatorio marcado como 'Hecho'."
-        elif filter_type == "pendientes":
+        elif filter_type == "pending":
             message = "📭 ¿No tienes nada pendiente? ¡Increíble!"
-        elif filter_type == "pasado":
+        elif filter_type == "past":
             message = "🗂️ No tienes recordatorios PASADOS."
         else: # filtro "futuro"
             message = get_text("lista_vacia")
@@ -296,15 +296,15 @@ async def send_interactive_list(
     # AHORA SE AÑADE SIEMPRE, NO SOLO PARA el contexto "lista"
     navigation_row = []
     
-    if filter_type == "pasado":
-        navigation_row.append(InlineKeyboardButton("📜 Próximos", callback_data=f"list_pivot:futuro{callback_suffix_base}"))
+    if filter_type == "past":
+        navigation_row.append(InlineKeyboardButton("📜 Próximos", callback_data=f"list_pivot:future{callback_suffix_base}"))
     else:
-        navigation_row.append(InlineKeyboardButton("🗂️ Pasados", callback_data=f"list_pivot:pasado{callback_suffix_base}"))
+        navigation_row.append(InlineKeyboardButton("🗂️ Pasados", callback_data=f"list_pivot:past{callback_suffix_base}"))
 
-    if filter_type == "hechos":
-        navigation_row.append(InlineKeyboardButton("⬜️ Pendientes", callback_data=f"list_pivot:pendientes{callback_suffix_base}"))
+    if filter_type == "done":
+        navigation_row.append(InlineKeyboardButton("⬜️ Pendientes", callback_data=f"list_pivot:pending{callback_suffix_base}"))
     else:
-        navigation_row.append(InlineKeyboardButton("✅ Hechos", callback_data=f"list_pivot:hechos{callback_suffix_base}"))
+        navigation_row.append(InlineKeyboardButton("✅ Hechos", callback_data=f"list_pivot:done{callback_suffix_base}"))
     
     keyboard_rows.append(navigation_row)
     # --- Fila 2: Paginación (<< y >>) ---
@@ -324,11 +324,11 @@ async def send_interactive_list(
     # --- Fila 3: Acciones (Limpiar, Cancelar) ---
     actions_row = []
     # El botón "Limpiar" solo tiene sentido en el contexto de /lista
-    if context_key == "lista":
-        if filter_type == "pasado":
-            actions_row.append(InlineKeyboardButton("🧹 Limpiar Pasados", callback_data="limpiar:pasados_ask"))
-        elif filter_type == "hechos":
-            actions_row.append(InlineKeyboardButton("🧹 Limpiar Hechos", callback_data="limpiar:hechos_ask"))
+    if context_key == "list":
+        if filter_type == "past":
+            actions_row.append(InlineKeyboardButton("🧹 Limpiar Pasados", callback_data="clean:past"))
+        elif filter_type == "done":
+            actions_row.append(InlineKeyboardButton("🧹 Limpiar Hechos", callback_data="clean:done"))
             
     if show_cancel_button:
         # El botón de cancelar ahora se alinea a la derecha si no hay botón de limpiar
