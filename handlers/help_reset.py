@@ -11,32 +11,32 @@ Contiene dos funcionalidades distintas:
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
-from db import resetear_base_de_datos
-from avisos import cancelar_todos_los_avisos
+from db import reset_database
+from alerts import cancel_all_alerts
 from config import OWNER_ID  
-from personalidad import get_text
-from utils import cancelar_conversacion, comando_inesperado
+from personality import get_text
+from utils import cancel_conversation, unexpected_command
 
 # --- ESTADO PARA LA CONVERSACIÓN DE RESETEO ---
-CONFIRMACION_RESET = 0 # Usar 0 es más explícito que range(1) para un solo estado
+CONFIRMATION_RESET = 0 # Usar 0 es más explícito que range(1) para un solo estado
 
 
 # =============================================================================
 # COMANDO /ayuda
 # =============================================================================
 
-async def ayuda(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Muestra la lista de comandos. El mensaje es dinámico: los usuarios
     normales ven los comandos básicos, mientras que el propietario del bot
     ve también los comandos de administrador.
     """
     chat_id = update.effective_chat.id
-    mensaje = get_text("ayuda_base")
+    message = get_text("ayuda_base")
     # Se añade la sección de administrador solo si el ID del usuario coincide con el del propietario.
     if chat_id == OWNER_ID:
-        mensaje += get_text("ayuda_admin")
-    await update.message.reply_text(mensaje, parse_mode="Markdown")
+        message += get_text("ayuda_admin")
+    await update.message.reply_text(message, parse_mode="Markdown")
 
 
 # =============================================================================
@@ -57,10 +57,10 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     # Si es el propietario, se pide la confirmación.
     await update.message.reply_text(get_text("reset_aviso"), parse_mode="Markdown")
-    return CONFIRMACION_RESET
+    return CONFIRMATION_RESET
 
 
-async def confirmar_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def confirm_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
     Segundo paso de la conversación. Espera la palabra 'CONFIRMAR'.
     Si la recibe, ejecuta el reseteo. Si no, cancela.
@@ -68,8 +68,8 @@ async def confirmar_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     # --- Validación robusta (insensible a mayúsculas/minúsculas) ---
     if update.message.text.strip().upper() == "CONFIRMAR":
         # Ejecuta las dos acciones de reseteo: vaciar la DB y limpiar el scheduler.
-        resetear_base_de_datos()
-        cancelar_todos_los_avisos()
+        reset_database()
+        cancel_all_alerts()
         await update.message.reply_text(get_text("reset_confirmado"))
     else:
         # Si el usuario escribe cualquier otra cosa, se asume que ha cancelado.
@@ -85,10 +85,10 @@ async def confirmar_reset(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 reset_handler = ConversationHandler(
     entry_points=[CommandHandler("reset", reset_cmd)],
     states={
-        CONFIRMACION_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirmar_reset)]
+        CONFIRMATION_RESET: [MessageHandler(filters.TEXT & ~filters.COMMAND, confirm_reset)]
     },
     fallbacks=[
-        CommandHandler("cancelar", cancelar_conversacion),
-        MessageHandler(filters.COMMAND, comando_inesperado)
+        CommandHandler("cancelar", cancel_conversation),
+        MessageHandler(filters.COMMAND, unexpected_command)
     ],
 )

@@ -1,4 +1,4 @@
-# handlers/posponer.py
+# handlers/snooze.py
 """
 Módulo para gestionar las interacciones con los botones de las notificaciones.
 
@@ -13,13 +13,13 @@ from datetime import datetime, timedelta
 import pytz
 
 from db import get_connection, get_config
-from avisos import cancelar_avisos, programar_avisos
+from alerts import cancel_alerts, schedule_alerts
 
 
 # =============================================================================
 # FUNCIÓN PRINCIPAL DEL HANDLER
 # =============================================================================
-async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Maneja las acciones de los botones de notificación: 'Hecho', 'Posponer' y 'OK'.
     """
@@ -27,7 +27,7 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
     await query.answer()
 
     # --- 1. Parseo seguro del callback_data ---
-    # Formatos posibles: "accion:rid" (ej: "ok:123") o "accion:valor:rid" (ej: "posponer:10:123")
+    # Formatos posibles: "accion:rid" (ej: "ok:123") o "accion:valor:rid" (ej: "snooze:10:123")
     parts = query.data.split(":")
     action = parts[0]
     rid = parts[-1] # El ID del recordatorio siempre es la última parte.
@@ -37,74 +37,74 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
         with conn.cursor() as cursor:
             # Placeholder >> %s
             cursor.execute(
-                "SELECT user_id, texto, estado, fecha_hora, aviso_previo FROM recordatorios WHERE id = %s", (rid,)
+                "SELECT user_id, text, status, datetime, pre_alert FROM reminders WHERE id = %s", (rid,)
             )
-            recordatorio_data = cursor.fetchone()
+            reminder_data = cursor.fetchone()
 
-    if not recordatorio_data:
+    if not reminder_data:
         await query.edit_message_text(text="👵 Vaya, parece que este recordatorio ya no existe.")
         return
 
-    user_id, texto, estado_actual, fecha_recordatorio_utc, aviso_previo_actual = recordatorio_data
-
+    user_id, text, status_current, datetime_reminder_utc, pre_alert_current = reminder_data
+    
     # Si el recordatorio ya estaba marcado como "Hecho", informamos y no hacemos nada más.
-    if estado_actual == 1:
-        await query.edit_message_text(text=f"✅ _{texto}_ \n\n(Este recordatorio ya estaba marcado como hecho).", parse_mode="Markdown")
+    if status_current == 1:
+        await query.edit_message_text(text=f"✅ _{text}_ \n\n(Este recordatorio ya estaba marcado como hecho).", parse_mode="Markdown")
         return
 
     # --- 3. Lógica específica para cada acción ---
 
     if action == "mark_done":   # Acción: Marcar como Hecho.
         with get_connection() as conn:
-            conn.cursor().execute("UPDATE recordatorios SET estado = 1, aviso_previo = 0 WHERE id = %s", (rid,))
-        cancelar_avisos(rid) # Cancelamos cualquier job futuro que pudiera quedar.
-        await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{texto}_", parse_mode="Markdown")
+            conn.cursor().execute("UPDATE reminders SET status = 1, pre_alert = 0 WHERE id = %s", (rid,))
+        cancel_alerts(rid) # Cancelamos cualquier job futuro que pudiera quedar.
+        await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{text}_", parse_mode="Markdown")
 
     elif action == "posponer":  # Acción: Posponer. Se pospone el aviso 10min.
         # Validación: No se puede posponer si no hay una fecha final.
-        if not fecha_recordatorio_utc:
+        if not datetime_reminder_utc:
             await query.edit_message_text(text="👵 ¡Criatura! No puedes posponer un recordatorio que no tiene una hora final establecida.")
             return
         
-        minutos_posponer = int(parts[1])
-        nueva_hora_aviso_utc = datetime.now(pytz.utc) + timedelta(minutes=minutos_posponer)
+        minutes_snooze = int(parts[1])
+        new_alert_time_utc = datetime.now(pytz.utc) + timedelta(minutes=minutes_snooze)
 
         # Validación: La nueva hora del aviso no puede superar la hora del recordatorio.
-        if nueva_hora_aviso_utc >= fecha_recordatorio_utc:
+        if new_alert_time_utc >= datetime_reminder_utc:
             await query.edit_message_text(text=f"⏰ No se puede posponer más. La siguiente notificación sería después de la hora límite del recordatorio.", parse_mode="Markdown")
             # Dejamos la notificación original, pero sin el botón de posponer.
             return
         
         # Calculamos el tiempo restante para mostrarlo en el nuevo aviso.
-        diferencia = fecha_recordatorio_utc - nueva_hora_aviso_utc
-        nuevo_aviso_previo_min = round(diferencia.total_seconds() / 60)
+        diff = datetime_reminder_utc - new_alert_time_utc
+        new_pre_alert_min = round(diff.total_seconds() / 60)
 
         # Reprogramamos el aviso con la nueva antelación.
         #  Llamamos a 'programar_avisos', que es la función principal y robusta.
-        await programar_avisos(
+        await schedule_alerts(
             query.message.chat_id,
             rid,
             user_id,
-            texto,
-            fecha_recordatorio_utc,
-            nuevo_aviso_previo_min,
-            es_pospuesto=True
+            text,
+            datetime_reminder_utc,
+            new_pre_alert_min,
+            is_snooze=True
         )
 
         # Guardamos el nuevo valor de 'aviso_previo' en la base de datos.
         with get_connection() as conn:
-            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = %s WHERE id = %s", (nuevo_aviso_previo_min, rid))
+            conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (new_pre_alert_min, rid))
 
         # Confirmamos al usuario.
         user_tz_str = get_config(query.message.chat_id, "user_timezone") or 'UTC'
         try: user_tz = pytz.timezone(user_tz_str)
         except pytz.UnknownTimeZoneError: user_tz = pytz.utc
         
-        nueva_hora_aviso_local = nueva_hora_aviso_utc.astimezone(user_tz)
-        hora_local_str = nueva_hora_aviso_local.strftime('%H:%M')
+        new_alert_time_local = new_alert_time_utc.astimezone(user_tz)
+        time_local_str = new_alert_time_local.strftime('%H:%M')
         
         await query.edit_message_text(
-            text=f"⏰ ¡Entendido! Te lo volveré a recordar a las *{hora_local_str}*.",
+            text=f"⏰ ¡Entendido! Te lo volveré a recordar a las *{time_local_str}*.",
             parse_mode="Markdown"
         )
 
@@ -124,4 +124,4 @@ async def handle_posponer_or_done(update: Update, context: ContextTypes.DEFAULT_
 # =============================================================================
 # Este handler escucha por todos los patrones de callback que pueden llegar
 # desde una notificación de aviso.
-posponer_handler = CallbackQueryHandler(handle_posponer_or_done, pattern=r"^(posponer|mark_done|ok):")
+snooze_handler = CallbackQueryHandler(handle_snooze_or_done, pattern=r"^(snooze|mark_done|ok):")

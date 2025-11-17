@@ -21,12 +21,11 @@ import telegram.error
 
 # --- Importaciones de Módulos Locales ---
 from config import TOKEN
-from db import crear_tablas
-import avisos
+from db import create_tables
+import alerts
 # Se importan los módulos de handlers que contienen los objetos handler ya construidos.
 from handlers import (
-    fijos, lista, recordar, cambiar_estado, borrar, 
-    help_reset, start_onboarding, editar, posponer, ajustes
+    change_status, delete, edit, list, pinned, help_reset, remind, settings, snooze, start_onboarding
 )
 
 # =============================================================================
@@ -58,10 +57,10 @@ def run_flask():
 def run_telegram_bot():
     """Inicializa, configura y ejecuta el bot de Telegram de forma indefinida."""
     # 1. Se asegura de que las tablas de la base de datos existan.
-    crear_tablas()
+    create_tables()
 
     # 2. Construye la aplicación del bot, vinculando el inicio del scheduler.
-    app = ApplicationBuilder().token(TOKEN).post_init(avisos.iniciar_scheduler).build()
+    app = ApplicationBuilder().token(TOKEN).post_init(alerts.start_scheduler).build()
 
     # 3. Registro de Handlers (el "cerebro" del bot).
     # El orden de registro es importante para la legibilidad del código.
@@ -69,28 +68,28 @@ def run_telegram_bot():
     # --- Flujo de Bienvenida e Información ---
     app.add_handler(start_onboarding.start_handler)     # /start y el proceso de onboarding.
     app.add_handler(CommandHandler(["info", "intro"], start_onboarding.info))
-    app.add_handler(CommandHandler(["ayuda", "help"], help_reset.ayuda))
+    app.add_handler(CommandHandler(["ayuda", "help"], help_reset.help_cmd))
 
     # --- Comandos de Gestión de Recordatorios ---
-    app.add_handler(fijos.fijo_handler) # /fijo
-    app.add_handler(recordar.recordar_handler)         # /recordar
-    app.add_handler(cambiar_estado.cambiar_estado_handler) # /cambiar
-    app.add_handler(borrar.borrar_handler)             # /borrar
-    app.add_handler(editar.editar_handler)             # /editar
+    app.add_handler(pinned.pinned_handler) # /fijo
+    app.add_handler(remind.remind_handler)         # /recordar
+    app.add_handler(change_status.change_status_handler) # /cambiar
+    app.add_handler(delete.delete_handler)             # /borrar
+    app.add_handler(edit.edit_handler)             # /editar
     
     # --- Handlers para Listas Interactivas (Comandos y Callbacks) ---
-    app.add_handler(lista.lista_command_handler)       # /lista
-    app.add_handler(lista.lista_shared_handler)        # Botones de paginación (<<, >>) y pivote (Pasados/Pendientes)
-    app.add_handler(lista.limpiar_handler_unificado)     # Botón y flujo para limpiar pasados/hechos
-    app.add_handler(lista.placeholder_handler)         # Botones invisibles de alineación
-    app.add_handler(lista.lista_fijos_pagination_handler) # Paginación para lista de recordatorios fijos
-    app.add_handler(lista.lista_cancel_handler)        # Botón universal [X] para cancelar en listas
+    app.add_handler(list.list_command_handler)       # /lista
+    app.add_handler(list.shared_list_callback_handler)        # Botones de paginación (<<, >>) y pivote (Pasados/Pendientes)
+    app.add_handler(list.clean_list_callback_handler)     # Botón y flujo para limpiar pasados/hechos
+    app.add_handler(list.placeholder_handler)         # Botones invisibles de alineación
+    app.add_handler(list.pinned_list_pagination_handler) # Paginación para lista de recordatorios fijos
+    app.add_handler(list.list_cancel_handler)        # Botón universal [X] para cancelar en listas
 
     # --- Handler para Acciones en Notificaciones (Callbacks) ---
-    app.add_handler(posponer.posponer_handler)         # Botones (OK, +10min, Hecho) en los avisos
+    app.add_handler(snooze.snooze_handler)         # Botones (OK, +10min, Hecho) en los avisos
 
     # --- Handlers de Configuración y Administración ---
-    app.add_handler(ajustes.ajustes_handler)           # /ajustes
+    app.add_handler(settings.settings_handler)           # /ajustes
     app.add_handler(help_reset.reset_handler)          # /reset (comando de admin)
 
     # 4. Inicio del bot.

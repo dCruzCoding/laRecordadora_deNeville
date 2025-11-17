@@ -1,4 +1,4 @@
-# personalidad.py
+# personality.py
 """
 Módulo de Personalidad y Textos.
 
@@ -17,7 +17,7 @@ from typing import Dict, List
 # DICCIONARIO PRINCIPAL DE TEXTOS
 # =============================================================================
 
-TEXTOS: Dict[str, List[str]] = {
+TEXTS: Dict[str, List[str]] = {
 
     # -------------------------------------------------------------------------
     # --- FLujo 1: Bienvenida (Onboarding) y Textos Informativos
@@ -140,88 +140,88 @@ TEXTOS: Dict[str, List[str]] = {
         "⏳ ¿Te aviso un poco antes? Mejor prevenir que necesitar un giratiempo. \n\n*(ej: 2h, 1d, 30m, 0 para ninguno)*."
     ],
     "recordatorio_guardado": [
-        "📝 ¡Apuntado! *#{id} - {texto} ({fecha})*. Más te vale que lo hagas, criatura.",
-        "📝 De acuerdo. *#{id} - {texto} ({fecha})*. A ver si esta vez no se te pasa.",
-        "📝 Registrado. *#{id} - {texto} ({fecha})*. No me hagas ir a buscarte.",
-        "📝 Listo. *#{id} - {texto} ({fecha})*. ¿Por fín apuntas ir a visitar a tu abuela?.",
-        "Dios mío que pesadilla, ¿por qué le prometería a mi nieto que te ayudaría? \n\n📝 *#{id} - {texto} ({fecha})*.",
-        "¡Ay! Qué me has pillado en el baño. Espera que voy a apuntarlo. (...) \n\n📝 Vale, ya. *#{id} - {texto} ({fecha})*."
+        "📝 ¡Apuntado! *#{id} - {text} ({date})*. Más te vale que lo hagas, criatura.",
+        "📝 De acuerdo. *#{id} - {text} ({date})*. A ver si esta vez no se te pasa.",
+        "📝 Registrado. *#{id} - {text} ({date})*. No me hagas ir a buscarte.",
+        "📝 Listo. *#{id} - {text} ({date})*. ¿Por fín apuntas ir a visitar a tu abuela?.",
+        "Dios mío que pesadilla, ¿por qué le prometería a mi nieto que te ayudaría? \n\n📝 *#{id} - {text} ({date})*.",
+        "¡Ay! Qué me has pillado en el baño. Espera que voy a apuntarlo. (...) \n\n📝 Vale, ya. *#{id} - {text} ({date})*."
     ],
     
     # -------------------------------------------------------------------------
     # --- Flujo 4: Edición de Recordatorios (/editar)
     # -------------------------------------------------------------------------
     "editar_elige_opcion": [
-        "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{texto}_ ({fecha}).\n\n¿Qué quieres cambiarle, criatura?"
+        "✅ Perfecto, he encontrado el recordatorio `#{user_id}`: _{text}_ ({date}).\n\n¿Qué quieres cambiarle, criatura?"
     ],
     "editar_pide_recordatorio_nuevo": [
-        "✍️ Entendido. El recordatorio actual es:\n`{texto_actual}` ({fecha_actual})\n\nAhora, escríbelo de nuevo con los cambios, usando el formato `fecha` `*` `texto`."
+        "✍️ Entendido. El recordatorio actual es:\n`{current_text}` ({current_date})\n\nAhora, escríbelo de nuevo con los cambios, usando el formato `fecha` `*` `texto`."
     ],
     "editar_pide_aviso_nuevo": [
-        "⏳ De acuerdo. Tu aviso actual está programado para *{aviso_actual}* antes. \n\n¿Cuánto tiempo antes quieres que te avise ahora? (ej: `30m`, `2h`, `0` para ninguno)."
+        "⏳ De acuerdo. Tu aviso actual está programado para *{current_alert}* antes. \n\n¿Cuánto tiempo antes quieres que te avise ahora? (ej: `30m`, `2h`, `0` para ninguno)."
     ],
     "editar_confirmacion_recordatorio": [
-        "👍 ¡Hecho! He actualizado el recordatorio `#{user_id}`. Ahora es: _{texto}_ ({fecha})."
+        "👍 ¡Hecho! He actualizado el recordatorio `#{user_id}`. Ahora es: _{text}_ ({date})."
     ],
     "editar_confirmacion_aviso": [
-        "👍 ¡Listo! He cambiado el aviso para el recordatorio `#{user_id}` a *{aviso_nuevo}* antes."
+        "👍 ¡Listo! He cambiado el aviso para el recordatorio `#{user_id}` a *{new_alert}* antes."
     ],
     
     # -------------------------------------------------------------------------
     # --- Flujo 5: Ajustes y Configuración (/ajustes)
     # -------------------------------------------------------------------------
     "ajustes_pide_nivel": [
-        "👵 A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar?\n\nEl nivel de seguridad actual es *{nivel}*.",
-        "👵 ¿Quieres que te trate con guantes de seda o que confíe en que no vas a romper nada?. Nivel actual: *{nivel}*."
+        "👵 A ver, explícame tus manías. ¿Necesitas que te pregunte todo dos veces o eres de los que se lanzan sin pensar?\n\nEl nivel de seguridad actual es *{level}*.",
+        "👵 ¿Quieres que te trate con guantes de seda o que confíe en que no vas a romper nada?. Nivel actual: *{level}*."
     ],
     "ajustes_confirmados": [
-        "✅ Bien, ya está. He guardado tu modo de seguridad en el nivel *{nivel}* (_{descripcion}_). A ver cuánto tardas en arrepentirte.",
-        "✨ Perfecto, criatura. La configuración ha quedado fijada en nivel *{nivel}* (_{descripcion}_), por arte de magia."
+        "✅ Bien, ya está. He guardado tu modo de seguridad en el nivel *{level}* (_{description}_). A ver cuánto tardas en arrepentirte.",
+        "✨ Perfecto, criatura. La configuración ha quedado fijada en nivel *{level}* (_{description}_), por arte de magia."
     ],
     "niveles_modo_seguro": {
         "0": "Sin confirmaciones", "1": "Confirmar solo al borrar",
         "2": "Confirmar solo al cambiar estado", "3": "Confirmar ambos"
     },
     "timezone_pide_metodo": [
-        "👵 De acuerdo, vamos a ajustar tu reloj. Tu zona horaria actual es *{timezone_actual}*.\n\n¿Cómo prefieres que encontremos la nueva? ¿Con magia o a la antigua usanza?"
+        "👵 De acuerdo, vamos a ajustar tu reloj. Tu zona horaria actual es *{current_timezone}*.\n\n¿Cómo prefieres que encontremos la nueva? ¿Con magia o a la antigua usanza?"
     ],
     "timezone_pide_ubicacion": ["🪄 ¡Hechizo de localización preparado! Pulsa el botón de abajo para compartir tu ubicación conmigo."],
     "timezone_pide_ciudad": ["✍️ Entendido. Venga, dime el nombre de una ciudad y la buscaré en mis mapas."],
-    "timezone_pregunta_confirmacion": ["🤔 ¡Hmph! Según mis mapas, '{ciudad}' está en la zona horaria *{timezone}*. ¿Es correcto? Responde `si` o `no`."],
+    "timezone_pregunta_confirmacion": ["🤔 ¡Hmph! Según mis mapas, '{city}' está en la zona horaria *{timezone}*. ¿Es correcto? Responde `si` o `no`."],
     "timezone_no_encontrada": ["👵 ¡Criatura! No encuentro esa ciudad en mis mapas. ¿Estás seguro de que la has escrito bien? Inténtalo de nuevo."],
     "timezone_confirmada": ["✅ ¡Entendido! He configurado tu zona horaria a *{timezone}*."],
     "timezone_reintentar": ["De acuerdo. Venga, inténtalo de nuevo. Escríbeme otra ciudad."],
-    "timezone_buscando": ["👵 Buscando '{ciudad}' en mi bola de cristal... Dame un segundo.",
-                "👵 A ver dónde queda esa ciudad de '{ciudad}'... Un momento, estoy consultando mis mapas mágicos."],
+    "timezone_buscando": ["👵 Buscando '{city}' en mi bola de cristal... Dame un segundo.",
+                "👵 A ver dónde queda esa ciudad de '{city}'... Un momento, estoy consultando mis mapas mágicos."],
     "ajustes_resumen_menu": [
         "🗓️ *Resumen Diario*\n\n"
         "¿Quieres que te dé un rapapolvo mañanero con tus tareas del día? Aquí puedes decidir si te molesto y a qué hora.\n\n"
-        "Estado actual: *{estado}*\n"
-        "Hora programada: *{hora}*"
+        "Estado actual: *{status}*\n"
+        "Hora programada: *{hour}*"
     ],
 
     # -------------------------------------------------------------------------
     # --- Flujo 6: Notificaciones (Avisos y Resumen)
     # -------------------------------------------------------------------------
     "aviso_programado": [
-        "🔔 Entendido. Te daré un grito {tiempo} antes. ¡Más te vale estar atento!",
-        "🔔 De acuerdo, te avisaré {tiempo} antes. No quiero excusas.",
-        "🔔 Perfecto, {tiempo} antes me oirás. Y no será para darte las buenas noches."
+        "🔔 Entendido. Te daré un grito {time} antes. ¡Más te vale estar atento!",
+        "🔔 De acuerdo, te avisaré {time} antes. No quiero excusas.",
+        "🔔 Perfecto, {time} antes me oirás. Y no será para darte las buenas noches."
     ],
     "aviso_no_programado": [
         "🤨 ¿Sin aviso? Muy valiente por tu parte. Espero que tu memoria no te falle como a Neville.",
         "🤨 De acuerdo, sin aviso. Allá tú con tu memoria de Doxy."
     ],
     "aviso_principal": [
-        "👵⏰ ¡Es la hora de tu deber! Tienes que: *{texto}*",
-        "👵⏰ ¡Espabila! Ya es la hora de: *{texto}*. Luego no digas que no te avisé.",
-        "👵⏰ ¡GRYFFINDOR! ¡Es la hora de tu deber! Tienes que: *{texto}*. ¡Haz que esta abuela se sienta orgullosa!"
+        "👵⏰ ¡Es la hora de tu deber! Tienes que: *{text}*",
+        "👵⏰ ¡Espabila! Ya es la hora de: *{text}*. Luego no digas que no te avisé.",
+        "👵⏰ ¡GRYFFINDOR! ¡Es la hora de tu deber! Tienes que: *{text}*. ¡Haz que esta abuela se sienta orgullosa!"
     ],
     "aviso_previo": [
-        "👵⚠️ ¡Atención! Dentro de {tiempo} tienes que hacer esto: *{texto}*. ¡Prepárate!",
-        "👵⚠️ Que no se te olvide, en {tiempo} te toca: *{texto}*. ¡Ve acabando lo que sea que estés haciendo!",
-        "👵⚠️ Te aviso con tiempo para que no tengas excusas. En {tiempo}: '{texto}'.",
-        "👵⚠️ Dentro de {tiempo} tienes esto: '{texto}'. Y llama a tu abuela que la tienes abandonada."
+        "👵⚠️ ¡Atención! Dentro de {time} tienes que hacer esto: *{text}*. ¡Prepárate!",
+        "👵⚠️ Que no se te olvide, en {time} te toca: *{text}*. ¡Ve acabando lo que sea que estés haciendo!",
+        "👵⚠️ Te aviso con tiempo para que no tengas excusas. En {time}: '{text}'.",
+        "👵⚠️ Dentro de {time} tienes esto: '{text}'. Y llama a tu abuela que la tienes abandonada."
     ],
     "resumen_diario_con_tareas": [
         "👵 ¡Buenos días, criatura! Más te vale no holgazanear, que para hoy tienes estas tareas:",
@@ -309,7 +309,7 @@ def get_text(key: str, **kwargs) -> str:
         str: Una de las frases asociadas a la clave, ya formateada.
     """
     # Usamos .get() con un valor por defecto para evitar errores si la clave no existe.
-    phrases = TEXTOS.get(key, ["¡Se me ha olvidado qué decir! ¡Esto es culpa tuya, seguro!"])
+    phrases = TEXTS.get(key, ["¡Se me ha olvidado qué decir! ¡Esto es culpa tuya, seguro!"])
     
     # Elegimos una frase al azar de la lista de opciones.
     phrase = random.choice(phrases)
