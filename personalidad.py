@@ -30,24 +30,22 @@ TEXTOS: Dict[str, List[str]] = {
     "onboarding_informacion": [
         "*La Recordadora* 🔮 es tu asistente personal mágico. ¡Presta atención a cómo funciono!\n\n"
         
-        "➕ *AÑADIR RECORDATORIOS*\n"
-        "Usa el comando /recordar con el formato `fecha * texto`. Por ejemplo:\n"
-        "`/recordar mañana a las 15:00 * Comprar ingredientes para la poción multijugos`\n"
+        "➕ *AÑADIR UNA TAREA PUNTUAL*\n"
+        "Usa el comando /recordar. Tienes dos formas:\n"
+        "  - **Modo Rápido:** Escribe todo de una vez, como `/recordar mañana a las 15:00 * Comprar ingredientes`. ¡Incluso entiendo si solo pones la hora, como `/recordar 18:30 * Pasear al perro`!\n"
+        "  - **Modo Interactivo:** Simplemente escribe /recordar y te preguntaré qué tipo de recordatorio quieres crear.\n"
         "Después, siempre te preguntaré si quieres un **aviso previo**.\n\n"
 
-        "📌 *TAREAS DIARIAS (RECORDATORIOS FIJOS)*\n"
-        "Para esas cosas que haces todos los días a la misma hora, usa el comando `/recordar fijo`. \n"
-        "Se abrirá un menú especial donde podrás **añadir, editar o borrar** estas tareas recurrentes. \n"
-        "Aparecerán en tu `/lista` con el emoji 📌 para que los distingas fácilmente.\n\n"
+        "📌 *GESTIONAR TAREAS DIARIAS (RECORDATORIOS FIJOS)*\n"
+        "Para esas cosas que repites sin parar, usa el comando /fijo. Se abrirá un menú especial donde podrás:\n"
+        "  - **Añadir** una nueva tarea recurrente.\n"
+        "  - **Editar** o **Borrar** las que ya existen.\n"
+        "  - ¡Lo más importante! Podrás **elegir los días de la semana** en que se repite (ej: solo los Lunes y Miércoles).\n\n"
 
-        "📜 *GESTIONAR TUS LISTAS*\n"
-        "El comando /lista abre tu centro de mandos interactivo. Desde ahí, podrás:\n"
-        "  - *Navegación por vistas*: Tienes dos formas de filtrar tus recordatorios con los botones:\n"
-        "    - `📜 Próximos` / `🗂️ Pasados`: Cambia entre la vista de tus tareas futuras y las que ya han expirado.\n"
-        "    - `✅ Hechos` / `⬜️ Pendientes`: Alterna entre ver todo lo que has completado o todo lo que te queda por hacer, sin importar la fecha.\n"
-        "  - `<<` / `>>`: Navega entre las páginas si tienes muchos recordatorios.\n"
-        "  - `🧹 Limpiar`: Cuando estés en la vista de `Pasados` o `Hechos`, aparecerá este botón para borrar todo ese archivo con un solo clic.\n"
-        "Además, puedes acceder directamente a una vista con el comando, por ejemplo: `/lista hechos` o `/lista pasados`.\n\n"
+        "📜 *CONSULTAR TUS LISTAS*\n"
+        "He separado tus tareas para que todo esté más ordenado:\n"
+        "  - **/lista**: Abre tu centro de mandos para las tareas **puntuales**. Desde ahí, podrás filtrar por `Pasados`, `Hechos`, etc.\n"
+        "  - **/lista fijos**: Muestra una lista simple y clara de todas tus tareas **recurrentes**.\n\n"
 
         "🔔 *NOTIFICACIONES INTELIGENTES*\n"
         "Cuando te llegue un aviso, ¡no es solo texto! Tendrá botones para que actúes al momento:\n"
@@ -56,11 +54,10 @@ TEXTOS: Dict[str, List[str]] = {
         "  - `👌 OK`: Simplemente descarta la notificación.\n\n"
 
         "🌞 *TU RESUMEN MAÑANERO*\n"
-        "Para que empieces el día con buen pie, **cada mañana a las 8:00** te enviaré un resumen con las tareas que tienes para hoy. ¡No tienes que hacer nada, ya está activado!\n"
-        "Si prefieres otra hora o no quieres que te moleste, puedes cambiarlo todo en **/ajustes**.\n\n"
+        "Cada mañana a la hora que elijas en /ajustes, te enviaré un resumen con las tareas puntuales que tienes para hoy. ¡No tienes que hacer nada!\n\n"
 
         "⚠️ *MUY IMPORTANTE: LA ZONA HORARIA*\n"
-        "Para que los avisos y el resumen te lleguen a *tu* hora y no a la mía, es crucial que configures bien tu zona horaria en **/ajustes**.\n\n"
+        "Para que los avisos y el resumen te lleguen a *tu* hora, es crucial que configures bien tu zona horaria en **/ajustes**.\n\n"
         "-------------------\n"
         "Para ver la lista completa de comandos, usa /ayuda en cualquier momento."
     ],
@@ -85,20 +82,44 @@ TEXTOS: Dict[str, List[str]] = {
         "👵 Aquí estoy otra vez… y ya veo que tu memoria es peor que la de mi nieto Neville. ¿Necesitas la /ayuda?",
         "👵 *Ayh… c-cchriatura… shooy La Recooordadora…* (...) \n\n😳 ¡Merlín bendito, que me has pillado sin la dentadura puesta! (/ayuda)."
     ],
+
     "ayuda_base": [
-        "*📖 Comandos de La Recordadora*\n¡Presta atención, no me hagas tener que repetírtelo! \n\n"
-        "🙋 /start – Para saludar como es debido.\n"
-        "🆘 /ayuda – Para ver esto otra vez, por si acaso.\n"
-        "🧙 /info – Para que te vuelva a explicar cómo usar la Recordadora.\n\n"
-        "📜 /lista – Para ver y gestionar todos tus recordatorios.\n"
-        "⏰ /recordar – Para añadir una nueva tarea a tu lista de desastres.\n"
-        "📌 /recordar fijo – Para gestionar esas tareas que se repiten todos los días.\n" # <-- LÍNEA AÑADIDA
-        "🗑️ /borrar – Para quitar algo que (con suerte) ya has hecho.\n"
-        "🔄 /cambiar – Para marcar una tarea como hecha o pendiente.\n"
-        "🪄 /editar – Para modificar un recordatorio que ya has creado.\n\n"
-        "⚙️ /ajustes – Para personalizar tus manías: modo seguro, tu zona horaria y el resumen mañanero.\n"
+        "*📖 Comandos de La Recordadora*\n¡Presta atención, no me hagas repetírtelo! \n\n"
+        "--- COMANDOS GENERALES ---\n"
+        "🙋 /start – Para saludar como es debido. \n"
+        "🆘 /ayuda (o /help) – Para ver esto otra vez, por si se te olvida.\n"
+        "🧙 /info (/intro) – Para que te vuelva a explicar cómo funciono.\n\n"
+
+        "--- GESTIÓN DE TAREAS ---\n"
+        "📜 **/lista** (/list) – Abre tu centro de mandos. ¡Y más te vale usar los filtros!\n"
+        "       └─ `pasados`, `hechos` o `pendientes` para filtrar la vista (ej: `/lista pasados`).\n"
+        "       └─ `fijos` para ver solo los que se repiten (ej: `/lista fijos`).\n\n"
+
+        "⏰ **/recordar** – Para añadir una nueva tarea a tu lista de desastres.\n"
+        "       └─ También entiendo: `/recordatorio`, `/recordatorios`, `/add`.\n"
+        "       └─ Tiene modo rápido: /recordar fecha-hora*texto.\n\n"
+
+        "📌 **/fijo** – Abre el menú para gestionar esas tareas que repites sin parar (añadir, editar y borrar).\n"
+        "       └─ También entiendo: `/fijos`, `/recurrente`, `/recurrentes`, `/pinned`.\n\n"
+
+        "🗑️ **/borrar** – Para quitar algo que (con suerte) ya has hecho.\n"
+        "       └─ También entiendo: `/delete`, `/del`, `/bor`.\n"
+        "       └─ Modo rápido: /borrar ID1 ID2 ...\n\n"
+
+        "🔄 **/cambiar** – Para marcar una tarea como hecha o pendiente.\n"
+        "       └─ También entiendo: `/change`, `/hecho`, `/done`, `/check`.\n"
+        "       └─ Modo rápido: /cambiar ID1 ID2 ...\n\n"
+
+        "🪄 **/editar** – Para modificar un recordatorio que ya has creado.\n"
+        "       └─ También entiendo: `/edit`, `/modificar`, `/mod`.\n"
+        "       └─ Modo rápido: /editar ID1 .\n\n"
+        
+        "--- OTROS COMANDOS ---\n"
+        "⚙️ /ajustes (/config) – Para personalizar tus manías: modo seguro, zona horaria y el resumen mañanero.\n"
         "❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
     ],
+
+
     "ayuda_admin": [
         "\n\n⚠️ /reset – ¡Ni se te ocurra tocar esto si no sabes lo que haces!",
     ],

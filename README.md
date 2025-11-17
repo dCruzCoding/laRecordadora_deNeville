@@ -81,7 +81,7 @@ Para agilizar el uso, la mayoría de los comandos de gestión aceptan argumentos
 
 ## 🏛️ Arquitectura y Versionado
 
-Este proyecto utiliza **Tags de Git** para marcar los lanzamientos de versiones estables. La rama `main` siempre contiene la última versión funcional y probada ***(actualmente v1.7.1)***.
+Este proyecto utiliza **Tags de Git** para marcar los lanzamientos de versiones estables. La rama `main` siempre contiene la última versión funcional y probada ***(actualmente v1.8.0)***.
 
 Puedes ver una lista de todas las versiones en la sección de **"Tags"** o **"Releases"** del repositorio en GitHub. Además, consultando el archivo consulta el archivo **[CHANGELOG.md](CHANGELOG.md)** puede explorar un historial detallado de cada versión con información sobre los cambios, mejoras y decisiones de diseño.
 
@@ -97,6 +97,5 @@ git checkout tags/v1.0-local
 
 ## 🛣️ Próximos Pasos (Roadmap)
 
--   **Recordatorios Recurrentes**: Implementar la capacidad de crear recordatorios que se repitan (ej: "todos los lunes a las 9:00").
 -   **Estadísticas de Usuario**: Un comando que muestre un resumen de tareas completadas.
 -   **(Largo Plazo) Explorar Alternativas a Render**: Tras probar y descartar arquitecturas *serverless* (como GCP Cloud Functions) por su incompatibilidad fundamental con componentes con estado (`ConversationHandler`, `APScheduler`), se explorará en el futuro el despliegue en **Fly.io**. Su generoso plan gratuito permite ejecutar procesos persistentes 24/7, lo que lo convierte en un candidato ideal para una solución de alojamiento gratuita y más robusta.

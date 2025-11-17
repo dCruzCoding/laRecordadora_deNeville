@@ -89,7 +89,7 @@ async def recibir_aviso_previo(update: Update, context: ContextTypes.DEFAULT_TYP
 # CONVERSATION HANDLER
 # =============================================================================
 recordar_handler = ConversationHandler(
-    entry_points=[CommandHandler("recordar", recordar_cmd, filters=~filters.Regex(r'fijo|fijos'))], # ¡OJO! excluye los recordatorios fijos
+    entry_points=[CommandHandler(["recordar", "recordatorio", "recordatorios", "add"], recordar_cmd)], 
     states={
         FECHA_TEXTO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_fecha_texto)],
         AVISO_PREVIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_aviso_previo)]

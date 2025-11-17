@@ -14,7 +14,7 @@ from telegram.ext import ContextTypes, CommandHandler, CallbackQueryHandler
 from telegram.error import BadRequest
 
 from db import borrar_recordatorios_por_filtro
-from utils import enviar_lista_interactiva, cancelar_callback
+from utils import enviar_lista_interactiva, enviar_lista_fijos, cancelar_callback
 from avisos import cancelar_avisos
 
 # =============================================================================
@@ -59,7 +59,12 @@ async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     Punto de entrada para el comando /lista. Muestra la vista por defecto
     o una vista filtrada si se proporcionan argumentos.
     """
-
+    # Si hay argumentos y el primero es un alias de "fijo", muestra la lista de fijos.
+    if context.args and context.args[0].lower() in ['fijo', 'fijos', 'recurrente', 'recurrentes', 'pinned']:
+        await enviar_lista_fijos(update, context)
+        return
+    
+    # Si no, procede con la lógica de la lista normal interactiva.
     filtro_inicial = "futuro"
 
     if context.args:
@@ -74,7 +79,6 @@ async def lista_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await enviar_lista_interactiva(
         update, context, context_key="lista", titulos=TITULOS["lista"], filtro=filtro_inicial
     )
-
 
 
 async def lista_shared_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -168,6 +172,12 @@ async def placeholder_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     """Responde a los clics en botones invisibles para que el cliente de Telegram no muestre un error."""
     await update.callback_query.answer()
 
+async def lista_fijos_pagination_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Maneja la paginación de la lista de recordatorios fijos."""
+    query = update.callback_query
+    page = int(query.data.split(":")[1])
+    # Reutilizamos la función de envío, pasándole la nueva página
+    await enviar_lista_fijos(update, context, page=page)
 
 # =============================================================================
 # EXPORTACIÓN DE HANDLERS
@@ -175,7 +185,7 @@ async def placeholder_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 # Estos handlers son importados y registrados en main.py.
 
 # Handler para el comando inicial /lista
-lista_command_handler = CommandHandler("lista", lista_cmd)
+lista_command_handler = CommandHandler(["lista", "list"], lista_cmd)
 
 # Handler para los botones de navegación (<<, >>, PENDIENTES, PASADOS)
 lista_shared_handler = CallbackQueryHandler(lista_shared_callback, pattern=r"^(list_page|list_pivot):")
@@ -188,3 +198,6 @@ lista_cancel_handler = CallbackQueryHandler(cancelar_callback, pattern=r"^list_c
 
 # Handler para los botones placeholder invisibles
 placeholder_handler = CallbackQueryHandler(placeholder_callback, pattern=r"^placeholder$")
+
+# Handler para la paginación de la lista de recordatorios fijos
+lista_fijos_pagination_handler = CallbackQueryHandler(lista_fijos_pagination_callback, pattern=r"^fijo_list_page:")

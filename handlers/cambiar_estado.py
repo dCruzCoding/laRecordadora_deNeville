@@ -236,7 +236,7 @@ async def _navegar_lista_en_conversacion(update: Update, context: ContextTypes.D
 # =============================================================================
 
 cambiar_estado_handler = ConversationHandler(
-    entry_points=[CommandHandler("cambiar", cambiar_estado_cmd)],
+    entry_points=[CommandHandler(["cambiar", "change", "hecho", "done", "check"], cambiar_estado_cmd)],
     states={
         ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids),
                     CallbackQueryHandler(_navegar_lista_en_conversacion, pattern=r"^(list_page|list_pivot):")],

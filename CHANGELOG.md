@@ -4,6 +4,37 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ---
 
+## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
+
+### [v1.8.0] - 2025-11-17
+
+#### ✨ Mejoras
+
+-   **Implementación de Recordatorios Fijos (Pinned Reminders) con selección de días:** Se ha añadido una nueva funcionalidad principal para gestionar tareas diarias de forma flexible.
+    -   **Nuevo comando `/fijo`:** Se ha introducido el comando `/fijo` (con alias como `/fijos`, `/recurrente`) que abre un menú de gestión exclusivo para **Añadir, Editar y Borrar** recordatorios recurrentes.
+    -   **Selección de días de la semana:** El flujo de creación y edición ahora incluye un teclado interactivo para que el usuario elija en qué días específicos de la semana quiere que se repita el recordatorio (ej: solo Lunes y Miércoles, Fines de semana, etc.).
+    -   **Listado separado:** Se ha creado el comando `/lista fijos` para consultar una lista clara y dedicada de todos los recordatorios fijos configurados, separándolos de la lista de tareas puntuales.
+    -   **Formato inteligente:** La visualización de los días se ha mejorado para reconocer y mostrar patrones comunes como "Todos los días", "Entre semana" o "Fines de semana".
+
+-   **Mejora de la experiencia de usuario (UX) y Usabilidad:**
+    -   **Alias para Comandos:** Se han añadido múltiples alias para los comandos principales (ej: `/help` para `/ayuda`, `/add` para `/recordar`, `/del` para `/borrar`) para hacer el bot más flexible e intuitivo.
+    -   **Documentación Actualizada:** Los manuales de `/ayuda` e `/info` han sido reescritos para reflejar todas las nuevas funcionalidades, filtros y alias.
+
+#### 🐛 Problemas resueltos
+
+-   **_E019_ - El flujo de edición de recordatorios fijos se bloqueaba en la selección de días.**
+    -   **Problema:** La función reutilizada para la selección de días no devolvía el estado de conversación correcto cuando se usaba en el flujo de edición.
+    -   **Solución:** Se ha hecho que la función sea "consciente del contexto" (sabiendo si está en modo 'añadir' o 'editar') para que siempre devuelva el estado de conversación apropiado.
+
+-   **_E018_ - El flujo de edición de recordatorios fijos permitía crear "jobs fantasma".**
+    -   **Problema:** Al intentar editar un recordatorio fijo con un ID inexistente, el bot no validaba el ID y creaba un nuevo `job` en el scheduler.
+    -   **Solución:** Se ha implementado un paso de validación que verifica que el ID existe y pertenece al usuario **antes** de continuar con la edición.
+
+-   **_E017_ - El borrado de recordatorios fijos no los eliminaba del scheduler.**
+    -   **Problema:** La función `cancelar_avisos` no reconocía el formato de los `jobs` de recordatorios fijos.
+    -   **Solución:** Se ha refactorizado la función `cancelar_avisos` para que pueda identificar y cancelar correctamente tanto `jobs` de recordatorios normales como fijos.
+
+
 ## [v1.7-migration-supabase] - Migración a Supabase y Mejoras de UX
 
 ### [v1.7.1] - 2025-10-30

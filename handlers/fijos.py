@@ -1,4 +1,4 @@
-# handlers/recordar_fijo.py
+# handlers/fijos.py
 import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (
@@ -10,7 +10,11 @@ from db import (
     get_config, add_recordatorio_fijo, get_fijos_by_chat_id,
     update_fijo_by_id, delete_fijo_by_id, check_fijo_exists
 )
-from utils import cancelar_conversacion, comando_inesperado
+from utils import (
+    cancelar_callback, comando_inesperado, cancelar_conversacion,
+    formatear_dias_semana, normalizar_texto, 
+    DIAS_SEMANA, DIAS_SEMANA_ORDEN
+)
 from avisos import programar_recordatorio_fijo_diario, cancelar_avisos
 from personalidad import get_text
 
@@ -18,13 +22,10 @@ from personalidad import get_text
 (
     MENU_FIJO,
     AÑADIR_PIDE_DATOS, AÑADIR_PIDE_DIAS,
-    ELEGIR_ID_BORRAR_FIJO,
+    ELEGIR_ID_BORRAR_FIJO, CONFIRMAR_BORRADO_FIJO,
     ELEGIR_ID_EDITAR_FIJO, RECIBIR_NUEVOS_DATOS_FIJOS,
     EDITAR_PIDE_DIAS 
-) = range(7)
-
-DIAS_SEMANA = {"L": "mon", "M": "tue", "X": "wed", "J": "thu", "V": "fri", "S": "sat", "D": "sun"}
-DIAS_SEMANA_ORDEN = ["L", "M", "X", "J", "V", "S", "D"]
+) = range(8)
 
 # =============================================================================
 # FUNCIONES DE AYUDA PARA EL TECLADO
@@ -71,10 +72,10 @@ async def _mostrar_lista_fijos(update: Update, context: ContextTypes.DEFAULT_TYP
     mensaje_lista = [texto_introduccion]
     for fijo_id, texto, hora, dias in fijos:   # Ahora 'dias' es una cadena como "mon,tue,fri"
         # Hacemos la conversión inversa para mostrar las letras
-        letras_dias = [letra for letra, cod in DIAS_SEMANA.items() if cod in dias.split(',')]
-        dias_str = ",".join(letras_dias) if letras_dias else "Ninguno"
-        mensaje_lista.append(f"  - `#{fijo_id}`: {texto} (a las {hora.strftime('%H:%M')}) [{dias_str}]")
-    
+        dias_str = formatear_dias_semana(dias)
+        mensaje_lista.append(f"`#{fijo_id}`: {texto} (a las {hora.strftime('%H:%M')})")
+        mensaje_lista.append(f"    └─ 📍 {dias_str}")
+
     await context.bot.send_message(chat_id, "\n".join(mensaje_lista), parse_mode="Markdown")
     return True
 
@@ -85,9 +86,10 @@ async def fijo_pide_datos_add(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text("➕ **Añadir Recordatorio Fijo**", parse_mode="Markdown")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="**Paso 1 de 2:** Escribe la hora y el texto.\nFormato: `HH:MM * Texto`",
+        text="**Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`.",
         parse_mode="Markdown"
     )
+    
     return AÑADIR_PIDE_DATOS
 
 async def fijo_recibe_datos_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -99,10 +101,12 @@ async def fijo_recibe_datos_add(update: Update, context: ContextTypes.DEFAULT_TY
     
     context.user_data['fijo_add_hora'], context.user_data['fijo_add_texto'] = match.groups()
     context.user_data['dias_seleccionados'] = set(DIAS_SEMANA.values()) # Por defecto, todos los días
+
+    context.user_data['fijo_context'] = 'add'  # Añadimos contexto para la función generalizada de selección de días
     
     keyboard = _build_days_keyboard(context.user_data['dias_seleccionados'])
     await update.message.reply_text(
-        "**Paso 2 de 2:** ¿Qué días quieres que se repita? (Por defecto, todos)",
+        "📆 **Paso 2 de 2:** ¿Qué días quieres que se repita? (Por defecto, todos)",
         reply_markup=keyboard
     )
     return AÑADIR_PIDE_DIAS
@@ -133,7 +137,12 @@ async def fijo_recibe_dia_seleccion(update: Update, context: ContextTypes.DEFAUL
         text="**Paso 2 de 2:** ¿Qué días quieres que se repita?",
         reply_markup=keyboard
     )
-    return AÑADIR_PIDE_DIAS
+    
+    # Leemos el contexto que guardamos y devolvemos el estado correcto.
+    if context.user_data.get('fijo_context') == 'edit':
+        return EDITAR_PIDE_DIAS
+    else: # Por defecto, o si es 'add'
+        return AÑADIR_PIDE_DIAS
 
 async def fijo_finaliza_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
@@ -170,32 +179,84 @@ async def fijo_finaliza_add(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def fijo_pide_id_borrar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("🗑️ **Borrar Recordatorio fijo**", parse_mode="Markdown")
-    if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo que quieres borrar:"):
+    await query.edit_message_text("🗑️ **Borrar Recordatorio Fijo**", parse_mode="Markdown")
+    if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo que quieres borrar:\n"):
         return ELEGIR_ID_BORRAR_FIJO
     return ConversationHandler.END
 
-async def fijo_ejecuta_borrado(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def fijo_procesa_id_para_borrar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """
+    Recibe el ID a borrar, lo valida y, si el Modo Seguro está activo, pide confirmación.
+    Si no, borra directamente.
+    """
+    chat_id = update.effective_chat.id
     try:
         fijo_id = int(update.message.text.strip().replace("#", ""))
     except ValueError:
         await update.message.reply_text("Por favor, introduce solo un número.")
         return ELEGIR_ID_BORRAR_FIJO
-    
+
+    # Validamos que el ID existe y pertenece al usuario
+    fijos = get_fijos_by_chat_id(chat_id)
+    recordatorio_a_borrar = next((f for f in fijos if f[0] == fijo_id), None)
+
+    if not recordatorio_a_borrar:
+        await update.message.reply_text(f"❌ No he encontrado un recordatorio fijo con el ID #{fijo_id}.")
+        return ELEGIR_ID_BORRAR_FIJO
+
+    # Guardamos el ID en el contexto para el siguiente paso
+    context.user_data["fijo_id_a_borrar"] = fijo_id
+
+    # --- LÓGICA DE MODO SEGURO ---
+    modo_seguro = int(get_config(chat_id, "modo_seguro") or 0)
+    if modo_seguro in (1, 3): # Niveles que requieren confirmación de borrado
+        _, texto, hora, dias = recordatorio_a_borrar
+        dias_str = formatear_dias_semana(dias) # Reutilizamos la función que ya tienes
+        
+        mensaje_confirmacion = (
+            f"👵 ¡Quieto ahí! Vas a borrar permanentemente el recordatorio fijo:\n\n"
+            f"  - `#{fijo_id}`: {texto} (a las {hora.strftime('%H:%M')}) [{dias_str}]\n\n"
+            "¿Estás completamente seguro? Escribe `SI` para confirmar."
+        )
+        await update.message.reply_text(mensaje_confirmacion, parse_mode="Markdown")
+        return CONFIRMAR_BORRADO_FIJO
+    else:
+        # Si no se requiere confirmación, borramos directamente
+        return await _ejecutar_borrado_fijo_final(update, context)
+
+async def fijo_confirma_y_borra(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Recibe la confirmación 'SI' y ejecuta el borrado."""
+    respuesta = normalizar_texto(update.message.text)
+    if respuesta.startswith("si"):
+        return await _ejecutar_borrado_fijo_final(update, context)
+    else:
+        await update.message.reply_text(get_text("cancelar"))
+        context.user_data.clear()
+        return ConversationHandler.END
+
+async def _ejecutar_borrado_fijo_final(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Lógica final que realiza el borrado en la DB y el scheduler."""
+    fijo_id = context.user_data.get("fijo_id_a_borrar")
+    if fijo_id is None: # Salvaguarda
+        return ConversationHandler.END
+
     num_borrados = delete_fijo_by_id(fijo_id)
     if num_borrados > 0:
         cancelar_avisos(f"fijo_{fijo_id}")
-        await update.message.reply_text(f"✅ Recordatorio fijo `#{fijo_id}` borrado.")
+        await update.message.reply_text(f"✅ Recordatorio fijo `#{fijo_id}` borrado permanentemente.")
     else:
+        # Este mensaje no debería aparecer si la validación previa funcionó
         await update.message.reply_text(f"❌ No he encontrado un recordatorio fijo con el ID #{fijo_id}.")
+        
+    context.user_data.clear()
     return ConversationHandler.END
 
 # --- Flujo de Editar ---
 async def fijo_pide_id_editar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("✍️ **Editar Recordatorio fijo**", parse_mode="Markdown")
-    if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo a editar:"):
+    await query.edit_message_text("✍️ **Editar Recordatorio Fijo**", parse_mode="Markdown")
+    if await _mostrar_lista_fijos(update, context, "Dime el ID del recordatorio fijo a editar:\n"):
         return ELEGIR_ID_EDITAR_FIJO
     return ConversationHandler.END
 
@@ -240,9 +301,11 @@ async def fijo_ejecuta_edicion(update: Update, context: ContextTypes.DEFAULT_TYP
     dias_seleccionados = set(DIAS_SEMANA.values())
     context.user_data['dias_seleccionados'] = dias_seleccionados
 
+    context.user_data['fijo_context'] = 'edit' # Añadimos contexto para la función generalizada de selección de días
+
     keyboard = _build_days_keyboard(dias_seleccionados)
     await update.message.reply_text(
-        "**Paso 2 de 2:** Hora y texto actualizados. Ahora, selecciona los días para este recordatorio:",
+        "📆 **Paso 2 de 2:** Hora y texto actualizados. Ahora, selecciona los días para este recordatorio:",
         reply_markup=keyboard
     )
     return EDITAR_PIDE_DIAS
@@ -279,23 +342,17 @@ async def fijo_finaliza_edit(update: Update, context: ContextTypes.DEFAULT_TYPE)
     context.user_data.clear()
     return ConversationHandler.END
 
-async def fijo_cancelar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.callback_query
-    await query.answer()
-    await query.edit_message_text(get_text("cancelar"))
-    return ConversationHandler.END
-
 # =============================================================================
 # CONVERSATION HANDLER
 # =============================================================================
 fijo_handler = ConversationHandler(
-    entry_points=[CommandHandler("recordar", fijo_cmd, filters=filters.Regex(r'fijo|fijos'))],
+    entry_points= [CommandHandler(['fijo', 'fijos', 'recurrente', 'recurrentes', 'pinned'], fijo_cmd)],
     states={
         MENU_FIJO: [
             CallbackQueryHandler(fijo_pide_datos_add, pattern="^fijo_add$"),
             CallbackQueryHandler(fijo_pide_id_editar, pattern="^fijo_edit$"),
             CallbackQueryHandler(fijo_pide_id_borrar, pattern="^fijo_delete$"),
-            CallbackQueryHandler(fijo_cancelar, pattern="^fijo_cancel$"),
+            CallbackQueryHandler(cancelar_callback, pattern="^fijo_cancel$"),
         ],
 
         # --- Flujo de Añadir ---
@@ -306,8 +363,9 @@ fijo_handler = ConversationHandler(
         ],
 
         # --- Flujo de Borrar ---
-        ELEGIR_ID_BORRAR_FIJO: [MessageHandler(filters.TEXT & ~filters.COMMAND, fijo_ejecuta_borrado)],
-        
+        ELEGIR_ID_BORRAR_FIJO: [MessageHandler(filters.TEXT & ~filters.COMMAND, fijo_procesa_id_para_borrar)],
+        CONFIRMAR_BORRADO_FIJO: [MessageHandler(filters.TEXT & ~filters.COMMAND, fijo_confirma_y_borra)],
+
         # --- Flujo de Editar ---
         ELEGIR_ID_EDITAR_FIJO: [MessageHandler(filters.TEXT & ~filters.COMMAND, fijo_pide_nuevos_datos)],
         RECIBIR_NUEVOS_DATOS_FIJOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, fijo_ejecuta_edicion)],

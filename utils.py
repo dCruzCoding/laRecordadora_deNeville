@@ -21,12 +21,48 @@ from dateparser.search import search_dates
 from telegram import Update, ReplyKeyboardRemove, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes, ConversationHandler
 
-from db import get_config, get_recordatorios, get_proximos_recordatorios_fijos
+from db import get_config, get_recordatorios, get_fijos_by_chat_id
 from personalidad import get_text
 
 # --- CONSTANTES ---
-ITEMS_PER_PAGE = 10  # Nº de recordatorios a mostrar por página en las listas interactivas.
+ITEMS_PER_PAGE = 10
+DIAS_SEMANA = {"L": "mon", "M": "tue", "X": "wed", "J": "thu", "V": "fri", "S": "sat", "D": "sun"}
+DIAS_SEMANA_ORDEN = ["L", "M", "X", "J", "V", "S", "D"]
 
+# --- CONSTANTES PARA LOS PATRONES ---
+ENTRE_SEMANA_SET = {"mon", "tue", "wed", "thu", "fri"}
+FIN_DE_SEMANA_SET = {"sat", "sun"}
+
+# --- Función de formateo para los dias del recordatorios enlistados ---
+def formatear_dias_semana(dias_db_str: str) -> str:
+    """
+    Traduce la cadena de días de la base de datos a un formato legible,
+    reconociendo patrones comunes como "Todos los días", "Entre semana", etc.
+    """
+    if not dias_db_str:
+        return "Ninguno"
+        
+    dias_seleccionados = set(dias_db_str.split(','))
+    
+    # 1. Comprobar si son todos los días
+    if len(dias_seleccionados) == 7:
+        return "Todos los días"
+        
+    # 2. Comprobar si es "Entre semana"
+    if dias_seleccionados == ENTRE_SEMANA_SET:
+        return "Entre semana"
+        
+    # 3. Comprobar si es "Fines de semana"
+    if dias_seleccionados == FIN_DE_SEMANA_SET:
+        return "Fines de semana"
+        
+    # 4. Si no es ninguno de los anteriores, construir la lista normal
+    letras_dias_ordenadas = [letra for letra in DIAS_SEMANA_ORDEN if DIAS_SEMANA[letra] in dias_seleccionados]
+    
+    if not letras_dias_ordenadas:
+        return "Ninguno"
+        
+    return ", ".join(letras_dias_ordenadas)
 
 # =============================================================================
 # SECCIÓN 1: PARSEO Y PROCESAMIENTO DE TEXTO DE ENTRADA
@@ -179,12 +215,8 @@ def convertir_utc_a_local(fecha_utc: datetime, user_timezone_str: str) -> dateti
         return fecha_utc # Devuelve UTC como fallback seguro.
 
 def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_global: str) -> str:
-    """Formatea una única línea de la lista de recordatorios, incluyendo la info del aviso."""
-    try:
-        _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio, es_fijo = recordatorio
-    except ValueError:
-        _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio = recordatorio
-        es_fijo = False
+    """Formatea una única línea de la lista de recordatorios normales."""
+    _, user_id, _, texto, fecha_utc, estado, aviso_previo, timezone_recordatorio = recordatorio
 
     lineas = []
     fecha_local = None
@@ -196,17 +228,10 @@ def _formatear_linea_individual(chat_id: int, recordatorio: tuple, user_tz_globa
     else:
         fecha_str = "Sin fecha"
     
-    # --- LÓGICA DEL EMOJI ---
-    if es_fijo:
-        prefijo = "📌" # Emoji para recordatorios fijos
-        # Formato SIN ID para recordatorios fijos
-        lineas.append(f"{prefijo} {texto} ({fecha_str})")
-    else:
-        prefijo = "✅" if estado == 1 else "⬜️" # Emojis para recordatorios normales
-        lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
+    prefijo = "✅" if estado == 1 else "⬜️"
+    lineas.append(f"{prefijo} `#{user_id}` - {texto} ({fecha_str})")
 
-    # La campanita de aviso solo se muestra para recordatorios normales y pendientes
-    if not es_fijo and estado == 0 and fecha_local and fecha_local > datetime.now(pytz.timezone(user_tz_global)) and aviso_previo and aviso_previo > 0:
+    if estado == 0 and fecha_local and fecha_local > datetime.now(pytz.timezone(user_tz_global)) and aviso_previo and aviso_previo > 0:
         fecha_aviso_local = fecha_local - timedelta(minutes=aviso_previo)
         lineas.append(f"  └─ 🔔 Aviso a las: {fecha_aviso_local.strftime('%d %b, %H:%M')}")
         
@@ -243,27 +268,7 @@ async def enviar_lista_interactiva(
     from datetime import datetime
     chat_id = update.effective_chat.id
 
-    # 1. OBTENER AMBOS TIPOS DE RECORDATORIOS
-    recordatorios_normales, _ = get_recordatorios(chat_id, filtro=filtro, page=1, items_per_page=1000) # Obtenemos todos
-    recordatorios_fijos = []
-
-    # Los recordatorios fijos solo se muestran en las vistas de "futuro" y "pendientes"
-    if filtro in ["futuro", "pendientes"]:
-        recordatorios_fijos = get_proximos_recordatorios_fijos(chat_id)
-
-    # 2. FUSIONAR Y ORDENAR
-    lista_completa = recordatorios_normales + recordatorios_fijos
-
-
-    # Ordenamos por fecha (índice 4). Los que no tienen fecha van al final.
-    # El objeto 'datetime.max.replace(tzinfo=pytz.UTC)' es un truco para que los None se ordenen al final.
-    lista_completa.sort(key=lambda r: r[4] if r[4] else datetime.max.replace(tzinfo=pytz.utc))
-
-    # 3. PAGINACIÓN EN PYTHON
-    total_items = len(lista_completa)
-    start_index = (page - 1) * ITEMS_PER_PAGE
-    end_index = start_index + ITEMS_PER_PAGE
-    recordatorios_pagina = lista_completa[start_index:end_index]
+    recordatorios_pagina, total_items = get_recordatorios(chat_id, filtro=filtro, page=page, items_per_page=ITEMS_PER_PAGE)
 
     # --- MENSAJES PARA LISTAS VACÍAS ---
     if total_items == 0:
@@ -345,7 +350,60 @@ async def enviar_lista_interactiva(
     else:
         await update.message.reply_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
 
+# Para lista de recordatorios fijos
+async def enviar_lista_fijos(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 1):
+    """
+    Genera y envía una lista simple y paginada de los recordatorios fijos.
+    """
+    chat_id = update.effective_chat.id
+    fijos = get_fijos_by_chat_id(chat_id)
 
+    if not fijos:
+        mensaje = "❌ No tienes ningún recordatorio fijo configurado."
+        reply_markup = None
+    else:
+        # --- Paginación manual en Python ---
+        total_items = len(fijos)
+        total_pages = ceil(total_items / ITEMS_PER_PAGE)
+        start_index = (page - 1) * ITEMS_PER_PAGE
+        end_index = start_index + ITEMS_PER_PAGE
+        fijos_pagina = fijos[start_index:end_index]
+
+        titulo = "📌  **RECORDATORIOS FIJOS**  📌"
+        if total_pages > 1:
+            titulo += f" (Pág. {page}/{total_pages})"
+        
+        # --- Construcción de la lista ---
+        mensaje_lista = []
+        for fijo_id, texto, hora, dias in fijos_pagina:
+            dias_str = formatear_dias_semana(dias)
+            mensaje_lista.append(f"{texto} (a las {hora.strftime('%H:%M')})")
+            mensaje_lista.append(f"  └─ 📍 {dias_str}")
+        
+        mensaje = titulo + "\n\n" + "\n".join(mensaje_lista)
+
+        # --- Construcción del teclado de paginación ---
+        keyboard_rows = []
+        if total_pages > 1:
+            paginacion_row = []
+            if page > 1:
+                paginacion_row.append(InlineKeyboardButton("<<", callback_data=f"fijo_list_page:{page - 1}"))
+            else:
+                paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+            
+            if page < total_pages:
+                paginacion_row.append(InlineKeyboardButton(">>", callback_data=f"fijo_list_page:{page + 1}"))
+            else:
+                paginacion_row.append(InlineKeyboardButton(" ", callback_data="placeholder"))
+            keyboard_rows.append(paginacion_row)
+        reply_markup = InlineKeyboardMarkup(keyboard_rows)
+
+    # --- Envío del mensaje ---
+    if update.callback_query:
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+    else:
+        await update.message.reply_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
 
 # =============================================================================
 # SECCIÓN 4: GESTIÓN DE CONVERSACIONES

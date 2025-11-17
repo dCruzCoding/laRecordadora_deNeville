@@ -10,7 +10,6 @@ Soporta dos modos:
 
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
-from datetime import datetime
 
 from db import get_connection, get_config
 from utils import cancelar_conversacion, comando_inesperado, enviar_lista_interactiva, convertir_utc_a_local, normalizar_texto
@@ -189,7 +188,7 @@ async def _navegar_lista_en_conversacion(update: Update, context: ContextTypes.D
 # CONVERSATION HANDLER
 # =============================================================================
 borrar_handler = ConversationHandler(
-    entry_points=[CommandHandler("borrar", borrar_cmd)],
+    entry_points=[CommandHandler(["borrar", "borrsr", "del", "delete", "bor"], borrar_cmd)],
     states={
         ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_ids),
                     CallbackQueryHandler(_navegar_lista_en_conversacion, pattern=r"^(list_page|list_pivot):")],

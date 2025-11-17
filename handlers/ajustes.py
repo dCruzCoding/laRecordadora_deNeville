@@ -443,7 +443,7 @@ async def guardar_hora_resumen(update: Update, context: ContextTypes.DEFAULT_TYP
 # =============================================================================
 
 ajustes_handler = ConversationHandler(
-    entry_points=[CommandHandler("ajustes", ajustes_cmd)],
+    entry_points=[CommandHandler(["ajustes", "settings", "sett", "config"], ajustes_cmd)],
     states={
         MENU_PRINCIPAL: [
             CallbackQueryHandler(menu_modo_seguro, pattern="^set_modo_seguro$"),

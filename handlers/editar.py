@@ -12,7 +12,10 @@ modificar un recordatorio existente. El flujo es el siguiente:
 """
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, CallbackQueryHandler, filters
+from telegram.ext import (
+    ContextTypes, ConversationHandler, CommandHandler, 
+    MessageHandler, CallbackQueryHandler, filters
+)
 from datetime import datetime
 import pytz
 
@@ -301,7 +304,7 @@ async def _navegar_lista_en_conversacion(update: Update, context: ContextTypes.D
     return ELEGIR_ID
 
 editar_handler = ConversationHandler(
-    entry_points=[CommandHandler("editar", editar_cmd)],
+    entry_points=[CommandHandler(["editar", "editsr", "edit", "modificar", "mod"], editar_cmd)],
     states={
         ELEGIR_ID: [MessageHandler(filters.TEXT & ~filters.COMMAND, recibir_id),
                     CallbackQueryHandler(_navegar_lista_en_conversacion, pattern=r"^(list_page|list_pivot):")],

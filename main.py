@@ -13,8 +13,6 @@ Este script inicia y coordina los dos componentes principales del bot:
 import threading
 import os
 import time
-import asyncio
-from asyncio import CancelledError
 
 # --- Importaciones de Librerías de Terceros ---
 from flask import Flask
@@ -27,7 +25,7 @@ from db import crear_tablas
 import avisos
 # Se importan los módulos de handlers que contienen los objetos handler ya construidos.
 from handlers import (
-    lista, recordar, recordar_fijo, cambiar_estado, borrar, 
+    fijos, lista, recordar, cambiar_estado, borrar, 
     help_reset, start_onboarding, editar, posponer, ajustes
 )
 
@@ -67,14 +65,14 @@ def run_telegram_bot():
 
     # 3. Registro de Handlers (el "cerebro" del bot).
     # El orden de registro es importante para la legibilidad del código.
-    
+   
     # --- Flujo de Bienvenida e Información ---
     app.add_handler(start_onboarding.start_handler)     # /start y el proceso de onboarding.
-    app.add_handler(CommandHandler("info", start_onboarding.info))
-    app.add_handler(CommandHandler("ayuda", help_reset.ayuda))
+    app.add_handler(CommandHandler(["info", "intro"], start_onboarding.info))
+    app.add_handler(CommandHandler(["ayuda", "help"], help_reset.ayuda))
 
     # --- Comandos de Gestión de Recordatorios ---
-    app.add_handler(recordar_fijo.fijo_handler) # /recordar_fijo
+    app.add_handler(fijos.fijo_handler) # /fijo
     app.add_handler(recordar.recordar_handler)         # /recordar
     app.add_handler(cambiar_estado.cambiar_estado_handler) # /cambiar
     app.add_handler(borrar.borrar_handler)             # /borrar
@@ -85,6 +83,7 @@ def run_telegram_bot():
     app.add_handler(lista.lista_shared_handler)        # Botones de paginación (<<, >>) y pivote (Pasados/Pendientes)
     app.add_handler(lista.limpiar_handler_unificado)     # Botón y flujo para limpiar pasados/hechos
     app.add_handler(lista.placeholder_handler)         # Botones invisibles de alineación
+    app.add_handler(lista.lista_fijos_pagination_handler) # Paginación para lista de recordatorios fijos
     app.add_handler(lista.lista_cancel_handler)        # Botón universal [X] para cancelar en listas
 
     # --- Handler para Acciones en Notificaciones (Callbacks) ---
@@ -107,7 +106,6 @@ def run_telegram_bot():
 # =============================================================================
 # SECCIÓN 3: PUNTO DE ENTRADA PRINCIPAL
 # =============================================================================
-
 if __name__ == "__main__":
     print("🚀 Iniciando servicios...")
     
