@@ -75,6 +75,12 @@ Este documento proporciona una guía paso a paso para configurar y desplegar "La
     SUPABASE_DB_URL="postgresql://postgres.xxxxxxxx:[TU_CONTRASEÑA]@aws-0-eu-central-1.pooler.supabase.com:6543/postgres"
     ```
 
+4. **(Opcional, pero recomendado) Desactivar el Acceso Anónimo a la API:**
+   -   Como tu bot es el único que accederá a la base de datos, puedes añadir una capa extra de seguridad.
+   -   Ve a **Project Settings -> API**.
+   -   En la sección **Project API keys**, busca la clave `anon` (public).
+   -   **NO LA BORRES**, pero copia y guarda su valor en un lugar seguro por si la necesitaras en el futuro. Luego, puedes reemplazar su valor por una cadena larga y aleatoria de caracteres. Esto efectivamente "desactiva" el acceso anónimo a la API de Supabase, que no estás utilizando.
+
 ---
 
 ## Paso 3: Despliegue en la Nube (Render)
@@ -105,14 +111,41 @@ Este documento proporciona una guía paso a paso para configurar y desplegar "La
 4.  **Lanzar el Despliegue:**
     -   Haz clic en **"Create Web Service"**. Render construirá e iniciará tu bot. El primer despliegue puede tardar unos minutos.
 
-5.  **Configurar la Base de Datos por Primera Vez:**
-    -   Una vez que el despliegue sea exitoso ("Live"), el bot se habrá ejecutado una vez y habrá creado las tablas en Supabase.
-    -   Ve a tu proyecto de Supabase -> **SQL Editor**.
-    -   Pega y ejecuta el siguiente script para desactivar RLS:
-        ```sql
-        ALTER TABLE public.recordatorios DISABLE ROW LEVEL SECURITY;
-        ALTER TABLE public.configuracion DISABLE ROW LEVEL SECURITY;
-        ```
+5. **Configurar la Seguridad de la Base de Datos (RLS):**
+   -   Una vez que el despliegue inicial en Render sea exitoso ("Live"), el bot se habrá ejecutado una vez y la función `create_tables()` habrá creado las tablas en tu base de datos de Supabase.
+   -   Ahora es el momento de **activar la red de seguridad**.
+   -   Ve a tu proyecto de Supabase -> **SQL Editor**.
+   -   Crea una **"+ New query"**.
+   -   Pega y ejecuta el siguiente script completo. Este script activará la **Seguridad a Nivel de Fila (RLS)** y creará las políticas necesarias para que el bot pueda seguir funcionando de forma segura, aislando los datos de cada usuario.
+
+     ```sql
+     -- ACTIVA RLS PARA LA TABLA DE RECORDATORIOS
+     ALTER TABLE public.reminders ENABLE ROW LEVEL SECURITY;
+     -- CREA LA POLÍTICA DE SEGURIDAD PARA RECORDATORIOS
+     CREATE POLICY "El usuario solo puede acceder a sus propios recordatorios"
+     ON public.reminders FOR ALL
+     USING (chat_id = (current_setting('app.current_chat_id', true))::bigint)
+     WITH CHECK (chat_id = (current_setting('app.current_chat_id', true))::bigint);
+
+     -- ACTIVA RLS PARA LA TABLA DE CONFIGURACIÓN
+     ALTER TABLE public.configuration ENABLE ROW LEVEL SECURITY;
+     -- CREA LA POLÍTICA DE SEGURIDAD PARA LA CONFIGURACIÓN
+     CREATE POLICY "El usuario solo puede acceder a su propia configuración"
+     ON public.configuration FOR ALL
+     USING (chat_id = (current_setting('app.current_chat_id', true))::bigint)
+     WITH CHECK (chat_id = (current_setting('app.current_chat_id', true))::bigint);
+
+     -- ACTIVA RLS PARA LA TABLA DE RECORDATORIOS FIJOS
+     ALTER TABLE public.pinned_reminders ENABLE ROW LEVEL SECURITY;
+     -- CREA LA POLÍTICA DE SEGURIDAD PARA LOS RECORDATORIOS FIJOS
+     CREATE POLICY "El usuario solo puede acceder a sus propios recordatorios fijos"
+     ON public.pinned_reminders FOR ALL
+     USING (chat_id = (current_setting('app.current_chat_id', true))::bigint)
+     WITH CHECK (chat_id = (current_setting('app.current_chat_id', true))::bigint);
+     ```
+
+   -   **¡Importante!** No apliques RLS a la tabla `apscheduler_jobs`, ya que es una tabla de sistema que necesita acceso global para funcionar.
+
 
 ---
 

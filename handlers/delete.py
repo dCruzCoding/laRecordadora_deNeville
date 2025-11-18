@@ -11,7 +11,7 @@ Soporta dos modos:
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
-from db import get_connection, get_config
+from db import get_config, get_reminders_for_deletion, delete_reminders_by_user_ids
 from utils import cancel_conversation, unexpected_command, send_interactive_list, convert_utc_to_local, normalize_text
 from alerts import cancel_alerts
 from handlers.list import TITLES, list_cancel_handler, shared_list_callback
@@ -71,27 +71,14 @@ async def _process_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids: 
     chat_id = update.effective_chat.id
     
     # 1. Limpiamos y validamos los IDs para asegurarnos de que son números.
-    user_ids_to_find = []
-    for user_id_str in ids:
-        try:
-            # Quitamos el '#' si lo tiene y lo convertimos a entero.
-            user_ids_to_find.append(int(user_id_str.replace("#", "")))
-        except (ValueError, TypeError):
-            pass # Ignoramos las entradas que no sean números.
+    user_ids_to_find = tuple(int(uid.replace("#", "")) for uid in ids if uid.replace("#", "").isdigit())
 
     if not user_ids_to_find:
         await update.message.reply_text(get_text("error_no_id"))
         return ConversationHandler.END
 
     # 2. Hacemos UNA SOLA CONSULTA a la base de datos para obtener la info de todos los IDs.
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # CAMBIO: PostgreSQL usa %s como placeholder, no ?.
-            # psycopg2 puede manejar una tupla de valores para 'IN' directamente.
-            query = "SELECT user_id, text, datetime FROM reminders WHERE user_id IN %s AND chat_id = %s"
-
-            cursor.execute(query, (tuple(user_ids_to_find), chat_id))
-            found_reminders = cursor.fetchall()
+    found_reminders = get_reminders_for_deletion(chat_id, user_ids_to_find)
 
     if not found_reminders:
         await update.message.reply_text(get_text("error_no_id"))
@@ -147,24 +134,16 @@ async def execute_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # Salvaguarda por si se llega aquí sin datos.
         return ConversationHandler.END
 
-    user_ids_to_delete = [recordatorio[0] for recordatorio in info_to_delete]
+    user_ids_to_delete = tuple(recordatorio[0] for recordatorio in info_to_delete)
 
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # 1. Obtenemos los IDs GLOBALES para cancelar los jobs del scheduler.
-            query_ids = "SELECT id FROM reminders WHERE user_id IN %s AND chat_id = %s"
-            cursor.execute(query_ids, (tuple(user_ids_to_delete), chat_id))
-            global_ids = [row[0] for row in cursor.fetchall()]
-
-            # 2. Hacemos UNA SOLA CONSULTA para borrar todos los recordatorios.
-            query_delete = "DELETE FROM reminders WHERE user_id IN %s AND chat_id = %s"
-            cursor.execute(query_delete, (tuple(user_ids_to_delete), chat_id))
+    # Obtenemos IDs globales
+    global_ids = delete_reminders_by_user_ids(chat_id, user_ids_to_delete)
     
-    # 3. Cancelamos todos los avisos asociados.
+    # Cancelamos todos los avisos asociados.
     for rid in global_ids:
         cancel_alerts(str(rid))
     
-    # 4. Enviamos un único mensaje de confirmación.
+    # Enviamos un único mensaje de confirmación.
     if len(info_to_delete) == 1:
         reminder = info_to_delete[0]
         success_message = f"🗑️ ¡Listo! El recordatorio `#{reminder[0]}` ('_{reminder[1]}_') ha sido borrado."

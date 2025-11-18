@@ -13,7 +13,7 @@ from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, Mess
 from datetime import datetime
 import pytz
 
-from db import get_connection, get_config
+from db import get_config, get_reminders_by_user_ids, change_reminders_status, update_reminder_pre_alert
 from utils import parse_time_to_minutes, cancel_conversation, unexpected_command, send_interactive_list, normalize_text
 from alerts import cancel_alerts, schedule_alerts
 from handlers.list import TITLES, list_cancel_handler, shared_list_callback
@@ -67,18 +67,13 @@ async def receive_ids(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 async def _process_ids_to_change(update: Update, context: ContextTypes.DEFAULT_TYPE, ids: list[str]) -> int:
     """Valida los IDs proporcionados y pide confirmación si el Modo Seguro está activo."""
     chat_id = update.effective_chat.id
-    user_ids_to_search = [int(uid.replace("#", "")) for uid in ids if uid.replace("#", "").isdigit()]
+    user_ids_to_search = tuple(int(uid.replace("#", "")) for uid in ids if uid.replace("#", "").isdigit())
 
     if not user_ids_to_search:
         await update.message.reply_text(get_text("error_no_id"))
         return ConversationHandler.END
 
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # CAMBIO: Placeholder a %s y uso de tupla para IN
-            query = "SELECT user_id, text, status FROM reminders WHERE user_id IN %s AND chat_id = %s"
-            cursor.execute(query, (tuple(user_ids_to_search), chat_id))
-            found_reminders = cursor.fetchall()
+    found_reminders = get_reminders_by_user_ids(chat_id, user_ids_to_search)
 
     if not found_reminders:
         await update.message.reply_text(get_text("error_no_id"))
@@ -121,52 +116,35 @@ async def execute_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     info_to_change = context.user_data.get("info_to_change", [])
     if not info_to_change: return ConversationHandler.END
 
-    user_ids_to_change = [reminder[0] for reminder in info_to_change]
+    user_ids_to_change = tuple(reminder[0] for reminder in info_to_change)
     
-    # 1. Obtenemos toda la información necesaria con UNA SOLA CONSULTA.
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            query = "SELECT id, user_id, status, text, datetime, pre_alert FROM reminders WHERE user_id IN %s AND chat_id = %s"
-            cursor.execute(query, (tuple(user_ids_to_change), chat_id))
-            full_info_reminders = cursor.fetchall()
+    # Obtenemos toda la información necesaria.
+    full_info_reminders = change_reminders_status(chat_id, user_ids_to_change)
 
-            # La sintaxis de UPDATE ahora usa %s
-            ids_to_pending = [r[1] for r in full_info_reminders if r[2] == 1]
-            ids_to_done = [r[1] for r in full_info_reminders if r[2] == 0]     
-            
-            if ids_to_pending:
-                cursor.execute("UPDATE reminders SET status = 0 WHERE user_id IN %s AND chat_id = %s", 
-                               (tuple(ids_to_pending), chat_id))
-            if ids_to_done:
-                cursor.execute("UPDATE reminders SET status = 1 WHERE user_id IN %s AND chat_id = %s", 
-                               (tuple(ids_to_done), chat_id))
-
-    # 3. Procesamos los resultados en Python.
+    # Procesamos los resultados en Python.
     reschedulable, past_without_alert = [], []
+    ids_to_done = [r[1] for r in full_info_reminders if r[2] == 0]
     
     for r_id, u_id, status, text, datetime_utc, alert in full_info_reminders:
-        if u_id in ids_to_done:
-            cancel_alerts(str(r_id))
+        cancel_alerts(str(r_id)) # Cancelamos siempre, se reprograme o no.
         
-        elif u_id in ids_to_pending:
-            cancel_alerts(str(r_id)) 
-            if datetime_utc:
-                if datetime_utc > datetime.now(pytz.utc):
-                    reschedulable.append({"global_id": r_id, "user_id": u_id, "text": text, "datetime": datetime_utc})
-                else:
-                    past_without_alert.append(f"`#{u_id}`")
+        if u_id not in ids_to_done: # Es decir, si se cambió a PENDIENTE
+            if datetime_utc and datetime_utc > datetime.now(pytz.utc):
+                reschedulable.append({"global_id": r_id, "user_id": u_id, "text": text, "datetime": datetime_utc})
+            else:
+                past_without_alert.append(f"`#{u_id}`")
     
     formatted_ids = [f"`#{r[0]}`" for r in info_to_change]
     await update.message.reply_text(f"🔄 ¡Hecho! Se ha actualizado el estado de: {', '.join(formatted_ids)}.", parse_mode="Markdown")
     
-    # 4. Enviamos los mensajes de feedback al usuario.
+    # Enviamos los mensajes de feedback al usuario.
     if past_without_alert:
         await update.message.reply_text(
             f"⚠️ Nota: El/los recordatorio(s) {', '.join(past_without_alert)} que has reactivado ya ha(n) pasado. No se pueden añadir nuevos avisos.",
             parse_mode="Markdown"
         )
 
-    # 5. Si hay recordatorios para reprogramar, iniciamos el sub-flujo.
+    # Si hay recordatorios para reprogramar, iniciamos el sub-flujo.
     if reschedulable:
         context.user_data["reschedule_list"] = reschedulable
         first_reminder = reschedulable[0]
@@ -192,9 +170,7 @@ async def receive_new_alert_time(update: Update, context: ContextTypes.DEFAULT_T
     current_reminder = reschedule_list.pop(0) # Lo sacamos de la lista
     
     # Guardamos el nuevo aviso_previo en la DB
-    with get_connection() as conn:
-        # CAMBIO: Placeholder a %s
-        conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (minutes, current_reminder["global_id"]))
+    update_reminder_pre_alert(update.effective_chat.id, current_reminder["global_id"], minutes)
 
     # Programamos el aviso con la nueva configuración
     await schedule_alerts(        

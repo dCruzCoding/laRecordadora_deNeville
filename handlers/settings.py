@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, Mess
 from timezonefinderL import TimezoneFinder
 from geopy.geocoders import Nominatim
 
-from db import get_config, set_config, get_connection
+from db import get_config, set_config, update_all_reminders_timezone
 from personality import get_text, TEXTS
 from utils import cancel_conversation, unexpected_command, normalize_text
 from daily_brief import schedule_daily_brief, cancel_daily_brief
@@ -310,10 +310,11 @@ async def process_tz_update(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     
     if query.data == "tz_update_yes":
         new_tz = context.user_data.get("new_tz")
-        with get_connection() as conn:
-            # CAMBIO: Se reemplaza '?' por '%s' para compatibilidad con PostgreSQL.
-            conn.cursor().execute("UPDATE reminders SET timezone = %s WHERE chat_id = %s", (new_tz, chat_id))
+
+        update_all_reminders_timezone(chat_id, new_tz)
+
         await query.edit_message_text("✅ ¡Entendido! He actualizado todos tus recordatorios a tu nueva zona horaria.")
+        
     else: # tz_update_no
         await query.edit_message_text("👍 De acuerdo. Tus recordatorios antiguos conservarán la zona horaria con la que fueron creados.")
         

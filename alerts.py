@@ -19,7 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 # Importaciones módulos locales
 import bot_state # Módulo de estado global para acceder a la instancia de la app
 from personality import get_text
-from db import get_connection
+from db import update_reminder_pre_alert, get_pinned_by_chat_id
 from config import SUPABASE_DB_URL
 
 
@@ -88,6 +88,7 @@ async def schedule_alerts(chat_id: int, reminder_id: str, user_id: int, text: st
     
     if not is_snooze:
         print(f"✅ Recordatorio programado: '{reminder_id}' para las {datetime.strftime('%Y-%m-%d %H:%M:%S')} (UTC)")
+
     # 2. Programar el aviso previo (si aplica y es en el futuro)
     if pre_alert > 0:
         alert_time = datetime - timedelta(minutes=pre_alert)
@@ -113,10 +114,7 @@ async def schedule_alerts(chat_id: int, reminder_id: str, user_id: int, text: st
 async def send_reminder(chat_id: int, user_id: int, text: str, reminder_id: str):
     """Función ejecutada por el scheduler para enviar la notificación principal."""
     if bot_state.telegram_app:
-        # --- CAMBIO: Limpiamos el aviso_previo al llegar la hora final ---
-        with get_connection() as conn:
-            with conn.cursor() as cursor:
-                cursor.execute("UPDATE reminders SET pre_alert = 0 WHERE id = %s", (reminder_id,))
+        update_reminder_pre_alert(chat_id, int(reminder_id), 0)
 
         message = get_text("aviso_principal", id=user_id, text=text)
         keyboard = [[
@@ -184,23 +182,45 @@ def cancel_all_alerts():
 # GESTIÓN DE RECORDATORIOS FIJOS (RECURRENTES)
 # =============================================================================
 
-def schedule_pinned_reminders(chat_id: int, pinned_id: int, text: str, hour: int, minute: int, timezone: str, days_of_week_str: str):
+def reschedule_all_pinned_for_chat(chat_id: int):
     """
-    Programa un job recurrente (cron) que se ejecuta todos los días a una hora específica.
+    Obtiene TODOS los recordatorios fijos de un usuario desde la DB, limpia los antiguos
+    del scheduler y programa los nuevos. Es la única fuente de verdad para la programación.
     """
-    job_id = f"pinned_{pinned_id}"
-    scheduler.add_job(
-        send_pinned_reminder,
-        trigger='cron',
-        hour=hour,
-        minute=minute,
-        day_of_week=days_of_week_str,
-        timezone=timezone,
-        id=job_id,
-        args=[chat_id, text],
-        replace_existing=True
-    )
-    print(f"🗓️   Recordatorio fijo DIARIO programado: job_id='{job_id}' para las {hour}:{minute:02d} ({days_of_week_str}) en {timezone}")
+    print(f"🔄 Resincronizando todos los recordatorios fijos para el chat_id: {chat_id}...")
+    
+    # 1. Obtenemos las reglas de programación actualizadas desde la base de datos.
+    all_pinned = get_pinned_by_chat_id(chat_id)
+
+    # 2. Limpiamos todos los jobs FIJOS existentes para este usuario.
+    #    Esto previene "jobs fantasma" si algo se borró manualmente o hubo un error.
+    for job in scheduler.get_jobs():
+        if job.id.startswith(f'pinned_') and job.args[0] == chat_id:
+            try:
+                scheduler.remove_job(job.id)
+                print(f"🗑️  Limpiando job fijo antiguo: {job.id}")
+            except Exception as e:
+                print(f"⚠️  Error al limpiar job antiguo {job.id}: {e}")
+
+    # 3. Iteramos y programamos cada recordatorio fijo con la información fresca de la DB.
+    for pinned_id, text, local_time, timezone, week_days in all_pinned:
+        
+        job_id = f"pinned_{pinned_id}"
+        try:
+            scheduler.add_job(
+                send_pinned_reminder,
+                trigger='cron',
+                hour=local_time.hour,
+                minute=local_time.minute,
+                day_of_week=week_days,
+                timezone=timezone,
+                id=job_id,
+                args=[chat_id, text],
+                replace_existing=True # 'replace_existing' es una buena salvaguarda
+            )
+            print(f"🗓️   Recordatorio fijo programado: '{job_id}' para las {local_time.hour}:{local_time.minute:02d} ({week_days}) en {timezone}")
+        except Exception as e:
+            print(f"Error al programar el recordatorio fijo {job_id}: {e}")
 
 async def send_pinned_reminder(chat_id: int, text: str):
     """

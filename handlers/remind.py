@@ -11,7 +11,7 @@ Soporta un modo rápido donde toda la información se puede dar en el comando in
 from telegram import Update
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters
 
-from db import get_connection, get_config
+from db import add_reminder, get_config, update_reminder_pre_alert
 from utils import (
     parse_reminder, parse_time_to_minutes, cancel_conversation,
     convert_utc_to_local, unexpected_command
@@ -43,18 +43,22 @@ async def receive_date_text(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def _process_date_text(update: Update, context: ContextTypes.DEFAULT_TYPE, user_input: str) -> int:
     chat_id = update.effective_chat.id
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
+
     text, date_obj, error = parse_reminder(user_input, user_timezone=user_tz)
+
     if error:
         await update.message.reply_text(error)
         return AWAITING_DATE_TEXT if not context.args else ConversationHandler.END
+    
     date_iso = date_obj.isoformat() if date_obj else None
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            cursor.execute("INSERT INTO reminders (user_id, chat_id, text, datetime, pre_alert, timezone) VALUES ((SELECT COALESCE(MAX(user_id), 0) + 1 FROM reminders WHERE chat_id = %s), %s, %s, %s, 0, %s) RETURNING id, user_id", (chat_id, chat_id, text, date_iso, user_tz))
-            global_id, user_id = cursor.fetchone()
+
+    global_id, user_id = add_reminder(chat_id, text, date_iso, user_tz)
+
     context.user_data["reminder_info"] = {"global_id": global_id, "user_id": user_id, "text": text, "date": date_obj}
+
     date_local = convert_utc_to_local(date_obj, user_tz)
     date_str = date_local.strftime("%d %b, %H:%M") if date_local else "Sin fecha"
+
     msg = get_text("recordatorio_guardado", id=user_id, text=text, date=date_str)
     await update.message.reply_text(msg, parse_mode="Markdown")
     await update.message.reply_text(get_text("recordar_pide_aviso"), parse_mode="Markdown")
@@ -68,12 +72,13 @@ async def receive_pre_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     info = context.user_data.get("reminder_info")
     if not info or not info.get("date"):
         return ConversationHandler.END
+    
+    chat_id = update.effective_chat.id
     scheduled = await schedule_alerts(update.effective_chat.id, str(info["global_id"]), info["user_id"], info["text"], info["date"], minutes)
     if minutes > 0:
         if scheduled:
-            with get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (minutes, info["global_id"]))
+            update_reminder_pre_alert(chat_id, info["global_id"], minutes)
+
             hours, mins = divmod(minutes, 60)
             time_str = f"{hours}h" if mins == 0 else f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
             await update.message.reply_text(get_text("aviso_programado", time=time_str))

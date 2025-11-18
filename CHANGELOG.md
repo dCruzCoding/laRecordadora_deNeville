@@ -7,10 +7,15 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
 
-### [v1.8.1.1] - 2025-11-18
+### [v1.8.1.2] - 2025-11-18
 
 #### ✨ Mejoras
 
+-   **Refactorización de la capa de datos y activación de RLS** *(v1.8.1.2)***:** Se ha llevado a cabo una re-arquitectura masiva de la interacción con la base de datos para mejorar la seguridad y la robustez del bot.
+    -   **Centralización del acceso a datos:** Se ha movido toda la lógica de la base de datos a un único módulo (`db.py`), eliminando código duplicado y estableciendo un punto de control de seguridad único para todas las operaciones.
+    -   **Activación de Seguridad a Nivel de Fila (RLS):** Se ha activado RLS en Supabase para todas las tablas de usuario. Esto añade una capa de seguridad crítica directamente en la base de datos, garantizando que un usuario nunca pueda acceder a los datos de otro, incluso en caso de un bug en la aplicación.
+    -   **Sincronización robusta del Scheduler:** Para los recordatorios fijos, el planificador de tareas ahora se resincroniza completamente con la base de datos después de cada cambio (añadir, editar o borrar). Esto asegura que los avisos programados sean siempre correctos y previene errores de estado.
+  
 -   **Refactorización del código base al Inglés:** Se ha realizado una refactorización exhaustiva para estandarizar todos los identificadores del código al inglés.
     -   **Alcance:** La traducción se ha aplicado a nombres de **variables, funciones, clases y archivos**.
     -   **Objetivo:** Este cambio elimina el "Spanglish" y mejora significativamente la legibilidad, consistencia y mantenibilidad del proyecto, facilitando futuras colaboraciones y desarrollo.
@@ -18,6 +23,9 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 #### 🐛 Problemas resueltos
 
+-   **_E022_ - El uso de `list` en lugar de `tuple` causaba errores de sintaxis SQL.** *(v1.8.1.2)*
+    -   **Problema:** En varios handlers, se pasaba una `lista` de IDs a las funciones de `db.py`. La librería `psycopg2` convertía esto a la sintaxis `ARRAY[...]` de PostgreSQL, que no es válida para la cláusula `IN`, provocando un `psycopg2.errors.SyntaxError`.
+    -   **Solución:** Se han modificado los handlers para pasar siempre una `tupla` de IDs, que `psycopg2` convierte correctamente a la sintaxis `(...)` que el operador `IN` espera.
 -   **_E021_ - La función de "Limpiar Pasados/Hechos" fallaba con un error de base de datos.** *(v1.8.1.1)*
     -   **Problema:** Al intentar borrar recordatorios filtrados, la función `delete_reminders_filtered` en `db.py` ejecutaba una consulta SQL que carecía de la cláusula que indicaba de qué tabla obtener la info. Esto causaba que PostgreSQL devolviera un error porque no saber dónde obtener los IDs.
     -   **Solución:** Se corrigió la consulta SQL añadiendo la cláusula `FROM reminders`, especificando así la tabla correcta y permitiendo que la función de borrado opere como se esperaba.
@@ -353,6 +361,15 @@ Esta sección documenta algunas de las decisiones de diseño clave tomadas duran
         2.  **Modelo de Backend de Confianza:** El bot opera como un servicio de backend único y de confianza. No necesita la capa de abstracción y seguridad (RLS) que el cliente de Supabase está diseñado para proporcionar a clientes no seguros (como un navegador web). Una conexión directa es más eficiente para este caso de uso.
         3.  **Menor Refactorización:** La lógica de la aplicación ya estaba escrita en SQL. Migrar de un dialecto SQL (SQLite) a otro (PostgreSQL) fue significativamente más sencillo que reescribir toda la la capa de datos para usar una API programática (`.select()`, `.insert()`, etc.).
 
--   **_D003 - Desactivación de la Seguridad a Nivel de Fila (RLS)_**
-    -   **Decisión:** Se ha desactivado explícitamente la política de RLS en las tablas `recordatorios` y `configuracion` en Supabase.
-    -   **Justificación:** La seguridad y el aislamiento de los datos de los usuarios no se delegan a la base de datos, sino que **son gestionados por la lógica de la aplicación del bot**. El bot es la única entidad que tiene acceso a la base de datos, y cada consulta que realiza está diseñada para incluir siempre una cláusula `WHERE chat_id = %s`, asegurando que un usuario solo pueda ver y modificar sus propios datos. Este modelo de "backend de confianza" es estándar y seguro, siempre que la cadena de conexión a la base de datos se mantenga secreta. RLS está diseñado para un modelo de seguridad diferente, donde clientes no seguros podrían acceder a la API de la base de datos directamente.
+-   **_D003 - Activación de la Seguridad a Nivel de Fila (RLS) como Segunda Capa de Seguridad_**
+    -   **Decisión:** Se ha activado explícitamente la política de Seguridad a Nivel de Fila (RLS) en las tablas principales que contienen datos de usuario: `reminders`, `configuration` y `pinned_reminders`. Esta decisión revierte la justificación anterior de confiar únicamente en la lógica de la aplicación.
+    -   **Justificación:** Si bien el modelo de "Backend de Confianza" sigue siendo la principal barrera de seguridad, se reconoce que su punto más débil es el error humano. Un simple bug en el código (como una consulta `UPDATE` o `SELECT` que olvide la cláusula `WHERE chat_id = %s`) podría exponer o corromper los datos de todos los usuarios.
+
+        RLS se introduce como una **segunda capa de seguridad (defensa en profundidad)** que opera directamente en la base de datos. Actúa como una red de seguridad infalible:
+        1.  **Contención de Errores:** Si la aplicación comete un error y envía una consulta insegura, la base de datos la bloqueará gracias a la política RLS.
+        2.  **Fuente Única de Verdad para la Seguridad:** La regla de "un usuario solo puede tocar sus propios datos" ya no es solo una responsabilidad del código Python, sino una **ley inmutable impuesta por la base de datos**.
+
+        Este enfoque transforma un potencial fallo de seguridad catastrófico en un error de aplicación contenido y manejable, aumentando drásticamente la robustez y fiabilidad del bot.
+    -   **Implementación:**
+        -   Se crearon políticas en Supabase para cada tabla, condicionando todo acceso (`SELECT`, `INSERT`, `UPDATE`, `DELETE`) a que la columna `chat_id` de la fila coincida con un valor de sesión (`current_setting('app.current_chat_id', true)`).
+        -   La capa de datos (`db.py`) fue refactorizada para que **todas** las funciones que acceden a datos de usuario establezcan primero esta variable de sesión (`SET LOCAL app.current_chat_id = %s`), proporcionando a la base de datos el contexto necesario para aplicar la política de seguridad correctamente.

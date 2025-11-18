@@ -19,7 +19,10 @@ from telegram.ext import (
 from datetime import datetime
 import pytz
 
-from db import get_connection, get_config
+from db import (
+    get_config, get_reminder_for_editing, update_reminder_content, 
+    update_reminder_pre_alert, get_reminder_status_for_validation
+)
 from utils import (
     send_interactive_list, parse_reminder, parse_time_to_minutes, 
     cancel_conversation, unexpected_command, convert_utc_to_local
@@ -83,14 +86,7 @@ async def _process_id_and_advance(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text(get_text("error_no_id"))
         return ConversationHandler.END
 
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # CAMBIO: Placeholder a %s
-            cursor.execute(
-                "SELECT id, text, datetime , timezone, pre_alert FROM reminders WHERE user_id = %s AND chat_id = %s", 
-                (user_id_to_edit, chat_id)
-            )
-            reminder = cursor.fetchone()
+    reminder = get_reminder_for_editing(chat_id, user_id_to_edit)
 
     if not reminder:
         await update.message.reply_text(get_text("error_no_id"))
@@ -173,12 +169,9 @@ async def save_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         await update.message.reply_text(get_text("error_formato"))
         return EDIT_REMINDER
 
-    with get_connection() as conn:
-        conn.cursor().execute(
-            "UPDATE reminders SET text = %s, datetime = %s, timezone = %s WHERE id = %s",
-            (text, datetime, user_tz, info["global_id"])
-        )
-    
+    update_reminder_content(chat_id, info["global_id"], text, datetime, user_tz)
+
+
     # Reprogramamos los avisos usando el 'aviso_previo' que ya estaba guardado.
     cancel_alerts(str(info["global_id"]))
     pre_alert = info.get("pre_alert", 0)
@@ -217,11 +210,7 @@ async def ask_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     # --- LÓGICA DE VALIDACIÓN ---
     # 1. Obtenemos el estado actual desde la base de datos para estar seguros.
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # Placeholder >> %s
-            cursor.execute("SELECT status, datetime FROM reminders WHERE id = %s", (info.get("global_id"),))
-            current_reminder = cursor.fetchone()
+    current_reminder = get_reminder_status_for_validation(chat_id, info.get("global_id"))
     
     if current_reminder:
         current_status, current_datetime_utc = current_reminder
@@ -260,10 +249,13 @@ async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if minutes is None:
         await update.message.reply_text(get_text("error_aviso_invalido"))
         return EDIT_ALERT
-        
+    
+    chat_id = update.effective_chat.id
+    confirmation_message = ""
+
     if minutes == 0:
-        with get_connection() as conn:
-            conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (0, info["global_id"]))
+        update_reminder_pre_alert(chat_id, info["global_id"], 0)
+
         cancel_alerts(str(info["global_id"]))
         confirmation_message = get_text("editar_confirmacion_aviso", user_id=info["user_id"], new_alert="ninguno")
     
@@ -272,14 +264,11 @@ async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return EDIT_ALERT
     
     else:
-        # CAMBIO: Usamos directamente el objeto datetime guardado.
-        date = info["datetime_utc"]
         alert_was_scheduled = await schedule_alerts(
-            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["text"], date, minutes
+            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["text"], info["datetime_utc"], minutes
         )
         if alert_was_scheduled:
-            with get_connection() as conn:
-                conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (minutes, info["global_id"]))
+            update_reminder_pre_alert(chat_id, info["global_id"], minutes)
             hours, mins = divmod(minutes, 60)
             new_time_str = f"{hours}h" if mins == 0 else f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
             confirmation_message = get_text("editar_confirmacion_aviso", user_id=info["user_id"], new_alert=new_time_str)

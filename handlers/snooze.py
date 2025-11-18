@@ -12,7 +12,7 @@ from telegram.ext import ContextTypes, CallbackQueryHandler
 from datetime import datetime, timedelta
 import pytz
 
-from db import get_connection, get_config
+from db import get_config, get_reminder_by_global_id, mark_reminder_as_done, update_reminder_pre_alert
 from alerts import cancel_alerts, schedule_alerts
 
 
@@ -25,6 +25,8 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
     """
     query = update.callback_query
     await query.answer()
+    chat_id = update.effective_chat.id # Obtenemos el chat_id para las funciones de DB
+
 
     # --- 1. Parseo seguro del callback_data ---
     # Formatos posibles: "accion:rid" (ej: "ok:123") o "accion:valor:rid" (ej: "snooze:10:123")
@@ -33,19 +35,16 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
     rid = parts[-1] # El ID del recordatorio siempre es la última parte.
 
     # --- 2. Obtención de datos y validaciones iniciales ---
-    with get_connection() as conn:
-        with conn.cursor() as cursor:
-            # Placeholder >> %s
-            cursor.execute(
-                "SELECT user_id, text, status, datetime, pre_alert FROM reminders WHERE id = %s", (rid,)
-            )
-            reminder_data = cursor.fetchone()
+    reminder_data = get_reminder_by_global_id(rid)
 
     if not reminder_data:
         await query.edit_message_text(text="👵 Vaya, parece que este recordatorio ya no existe.")
         return
 
-    user_id, text, status_current, datetime_reminder_utc, pre_alert_current = reminder_data
+    user_id, text, status_current, datetime_reminder_utc, pre_alert_current, reminder_chat_id = reminder_data
+
+    # Doble check de seguridad por si acaso
+    if chat_id != reminder_chat_id: return
     
     # Si el recordatorio ya estaba marcado como "Hecho", informamos y no hacemos nada más.
     if status_current == 1:
@@ -53,14 +52,12 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     # --- 3. Lógica específica para cada acción ---
-
     if action == "mark_done":   # Acción: Marcar como Hecho.
-        with get_connection() as conn:
-            conn.cursor().execute("UPDATE reminders SET status = 1, pre_alert = 0 WHERE id = %s", (rid,))
+        mark_reminder_as_done(rid, chat_id)
         cancel_alerts(rid) # Cancelamos cualquier job futuro que pudiera quedar.
         await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{text}_", parse_mode="Markdown")
 
-    elif action == "posponer":  # Acción: Posponer. Se pospone el aviso 10min.
+    elif action == "snooze":  # Acción: Posponer. Se pospone el aviso 10min.
         # Validación: No se puede posponer si no hay una fecha final.
         if not datetime_reminder_utc:
             await query.edit_message_text(text="👵 ¡Criatura! No puedes posponer un recordatorio que no tiene una hora final establecida.")
@@ -92,8 +89,8 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
         )
 
         # Guardamos el nuevo valor de 'aviso_previo' en la base de datos.
-        with get_connection() as conn:
-            conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (new_pre_alert_min, rid))
+        update_reminder_pre_alert(chat_id, rid, new_pre_alert_min)
+
 
         # Confirmamos al usuario.
         user_tz_str = get_config(query.message.chat_id, "user_timezone") or 'UTC'
@@ -110,9 +107,8 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
 
     elif action == "ok":
         # Acción: Descartar la notificación.
-        with get_connection() as conn:
-            # Reseteamos el aviso_previo a 0 para que no aparezca en /lista.
-            conn.cursor().execute("UPDATE recordatorios SET aviso_previo = 0 WHERE id = %s", (rid,))
+        update_reminder_pre_alert(chat_id, rid, 0)
+
                            
         # Editamos el mensaje para quitar los botones, manteniendo el texto original.
         await query.edit_message_text(text=query.message.text, reply_markup=None, parse_mode="Markdown")

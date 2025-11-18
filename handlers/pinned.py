@@ -15,7 +15,7 @@ from utils import (
     format_week_days, normalize_text, 
     WEEK_DAYS_MAP, WEEK_DAYS_ORDER
 )
-from alerts import schedule_pinned_reminders, cancel_alerts
+from alerts import reschedule_all_pinned_for_chat
 from personality import get_text
 
 # --- Definición de Estados ---
@@ -166,9 +166,8 @@ async def pinned_finalize_add(update: Update, context: ContextTypes.DEFAULT_TYPE
     days_str_db = ",".join(ordered_days)
 
     fijo_id = add_pinned_reminder(chat_id, text, hour_str, user_tz, days_str_db)
-    hour, minute = map(int, hour_str.split(':'))
     
-    schedule_pinned_reminders(chat_id, fijo_id, text, hour, minute, user_tz, days_str_db)
+    reschedule_all_pinned_for_chat(chat_id)
     
     await query.edit_message_text(f"✅ ¡Añadido! Recordatorio fijo `#{fijo_id}` programado para los días seleccionados.")
     
@@ -239,10 +238,15 @@ async def _execute_delete_pinned(update: Update, context: ContextTypes.DEFAULT_T
     pinned_id = context.user_data.get("pinned_id_to_delete")
     if pinned_id is None: # Salvaguarda
         return ConversationHandler.END
+    
+    chat_id = update.effective_chat.id
+    num_deleted = delete_pinned_by_id(chat_id, pinned_id)
 
-    num_deleted = delete_pinned_by_id(pinned_id)
     if num_deleted > 0:
-        cancel_alerts(f"pinned_{pinned_id}")
+        # En lugar de cancelar solo este, resincronizamos todo.
+        # Esto es más seguro y limpia cualquier posible estado inconsistente.
+        reschedule_all_pinned_for_chat(chat_id)
+
         await update.message.reply_text(f"✅ Recordatorio fijo `#{pinned_id}` borrado permanentemente.")
     else:
         # Este mensaje no debería aparecer si la validación previa funcionó
@@ -320,23 +324,24 @@ async def pinned_finalize_edit(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Debes seleccionar al menos un día.")
         return EDIT_ASK_DAYS
 
-    # Recuperamos todos los datos guardados en el contexto
+    # 1. Recuperamos los datos necesarios del contexto del usuario.
     pinned_id = context.user_data["pinned_id_to_edit"]
     new_hour = context.user_data["pinned_edit_new_time"]
     new_text = context.user_data["pinned_edit_new_text"]
     chat_id = update.effective_chat.id
-    user_tz = get_config(chat_id, "user_timezone") or "UTC"
     
+    # 2. Preparamos la cadena de días para guardarla en la base de datos.
     ordered_days = sorted(list(selected_days), key=lambda d: list(WEEK_DAYS_MAP.values()).index(d))
     days_str_db = ",".join(ordered_days)
 
-    # Llamamos a UPDATE en lugar de a ADD.
-    update_pinned_by_id(pinned_id, new_text, new_hour, days_str_db)
+    # 3. Actualizamos la base de datos. Esta es nuestra "fuente de verdad".
+    update_pinned_by_id(chat_id, pinned_id, new_text, new_hour, days_str_db)
     
-    # Reprogramamos el job con la información actualizada
-    hour, minute = map(int, new_hour.split(':'))
-    schedule_pinned_reminders(chat_id, pinned_id, new_text, hour, minute, user_tz, days_str_db)
+    # 4. Le pedimos al scheduler que se resincronice con la base de datos.
+    #    No necesitamos pasarle ningún dato, él mismo los leerá.
+    reschedule_all_pinned_for_chat(chat_id)
     
+    # 5. Confirmamos al usuario y terminamos.
     await query.edit_message_text(f"✅ ¡Actualizado! El recordatorio fijo `#{pinned_id}` ha sido modificado.")
     
     context.user_data.clear()
