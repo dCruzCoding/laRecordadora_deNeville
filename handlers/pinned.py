@@ -106,7 +106,7 @@ async def pinned_receive_data_add(update: Update, context: ContextTypes.DEFAULT_
     
     keyboard = _build_days_keyboard(context.user_data['selected_days'])
     await update.message.reply_text(
-        "📆 **Paso 2 de 2:** ¿Qué días quieres que se repita? (Por defecto, todos)",
+        "📆 Paso 2 de 2: ¿Qué días quieres que se repita? (Por defecto, todos)",
         reply_markup=keyboard
     )
     return ADD_ASK_DAYS
@@ -118,7 +118,7 @@ async def pinned_receive_day_selection(update: Update, context: ContextTypes.DEF
     day_cod = query.data.split('_')[-1] # ej: "fijo_dia_mon" -> "mon"
     selected_days = context.user_data.get('selected_days', set())
 
-    if day_cod == "todos":
+    if day_cod == "all":
         # Si ya están todos, los quitamos todos. Si no, los seleccionamos todos.
         if len(selected_days) == 7:
             selected_days.clear()
@@ -134,7 +134,7 @@ async def pinned_receive_day_selection(update: Update, context: ContextTypes.DEF
     
     keyboard = _build_days_keyboard(selected_days)
     await query.edit_message_text(
-        text="**Paso 2 de 2:** ¿Qué días quieres que se repita?",
+        text="📆 Paso 2 de 2: ¿Qué días quieres que se repita?",
         reply_markup=keyboard
     )
     
@@ -156,8 +156,8 @@ async def pinned_finalize_add(update: Update, context: ContextTypes.DEFAULT_TYPE
         )
         return ADD_ASK_DAYS
 
-    hour_str = context.user_data['pinned_add_hour']
-    text = context.user_data['pinned_add_text']
+    hour_str = context.user_data['add_pinned_hour']
+    text = context.user_data['add_pinned_text']
     chat_id = update.effective_chat.id
     user_tz = get_config(chat_id, "user_timezone") or "UTC"
     
@@ -208,7 +208,7 @@ async def pinned_process_id_to_delete(update: Update, context: ContextTypes.DEFA
     context.user_data["pinned_id_to_delete"] = pinned_id
 
     # --- LÓGICA DE MODO SEGURO ---
-    safe_mode = int(get_config(chat_id, "modo_seguro") or 0)
+    safe_mode = int(get_config(chat_id, "safe_mode") or 0)
     if safe_mode in (1, 3): # Niveles que requieren confirmación de borrado
         _, text, hour, days = reminder_to_delete
         days_str = format_week_days(days) # Reutilizamos la función que ya tienes
@@ -305,7 +305,7 @@ async def pinned_execute_edit(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     keyboard = _build_days_keyboard(selected_days)
     await update.message.reply_text(
-        "📆 **Paso 2 de 2:** Hora y texto actualizados. Ahora, selecciona los días para este recordatorio:",
+        "📆 Paso 2 de 2: Hora y texto actualizados. Ahora, selecciona los días para este recordatorio:",
         reply_markup=keyboard
     )
     return EDIT_ASK_DAYS

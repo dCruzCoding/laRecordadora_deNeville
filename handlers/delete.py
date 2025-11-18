@@ -101,7 +101,7 @@ async def _process_ids(update: Update, context: ContextTypes.DEFAULT_TYPE, ids: 
     context.user_data["info_to_delete"] = found_reminders
     
     # 3. Comprobamos el Modo Seguro.
-    safe_mode = int(get_config(chat_id, "modo_seguro") or 0)
+    safe_mode = int(get_config(chat_id, "safe_mode") or 0)
     if safe_mode in (1, 3):
         # Si se requiere confirmación, construimos el mensaje y esperamos respuesta.
         user_tz = get_config(chat_id, "user_timezone") or "UTC"

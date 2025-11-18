@@ -86,7 +86,7 @@ async def _process_ids_to_change(update: Update, context: ContextTypes.DEFAULT_T
 
     context.user_data["info_to_change"] = found_reminders
     
-    safe_mode = int(get_config(chat_id, "modo_seguro") or 0)
+    safe_mode = int(get_config(chat_id, "safe_mode") or 0)
     if safe_mode in (2, 3):
         status_emoji = {0: "⬜️", 1: "✅"}
         message_lines = []
