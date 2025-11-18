@@ -38,7 +38,7 @@ def _build_main_menu() -> tuple[str, InlineKeyboardMarkup]:
         InlineKeyboardButton("🛡️", callback_data="set_safe_mode"),
         InlineKeyboardButton("🌍", callback_data="set_timezone"),
         InlineKeyboardButton("🗓️", callback_data="set_daily_brief"),
-        InlineKeyboardButton("❌", callback_data="settings_back_to_menu")
+        InlineKeyboardButton("❌", callback_data="settings_cancel")
     ]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -95,7 +95,7 @@ async def safe_mode_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     query = update.callback_query
     await query.answer()
     chat_id = update.effective_chat.id
-    current_safe_mode = get_config(chat_id, "modo_seguro") or "0"
+    current_safe_mode = get_config(chat_id, "safe_mode") or "0"
     
     keyboard = [
         [InlineKeyboardButton("🔓 Nivel 0 (Sin confirmaciones)", callback_data="safe_level:0")],
@@ -319,8 +319,8 @@ async def process_tz_update(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         
     # --- ¡LÓGICA DE EVENTOS! ---
     # Reprogramamos el resumen con la nueva TZ (si está activado)
-    if get_config(chat_id, "resumen_diario_activado") == '1':
-        hour = get_config(chat_id, "resumen_diario_hora") or "08:00"
+    if get_config(chat_id, "daily_brief_activated") == '1':
+        hour = get_config(chat_id, "daily_brief_hour") or "08:00"
         new_tz = context.user_data.get("new_tz", "UTC")
         schedule_daily_brief(chat_id, hour, new_tz)
 
@@ -340,8 +340,8 @@ async def menu_daily_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     chat_id = update.effective_chat.id
 
     # Obtenemos la configuración actual del usuario, con valores por defecto
-    is_enabled = get_config(chat_id, "resumen_diario_activado") == '1'
-    time_str = get_config(chat_id, "resumen_diario_hora") or "08:00"
+    is_enabled = get_config(chat_id, "daily_brief_activated") == '1'
+    time_str = get_config(chat_id, "daily_brief_hour") or "08:00"
 
     # Preparamos los textos para el mensaje
     status_str = "✅ Activado" if is_enabled else "❌ Desactivado"
@@ -355,8 +355,8 @@ async def menu_daily_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    mensaje = get_text("ajustes_resumen_menu", status_str=status_str, hour=time_str)
-    await query.edit_message_text(text=mensaje, reply_markup=reply_markup, parse_mode="Markdown")
+    message = get_text("ajustes_resumen_menu", status=status_str, hour=time_str)
+    await query.edit_message_text(text=message, reply_markup=reply_markup, parse_mode="Markdown")
     return DAILY_BRIEF_MENU
 
 async def toggle_daily_brief(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -365,14 +365,14 @@ async def toggle_daily_brief(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await query.answer()
     chat_id = update.effective_chat.id
 
-    current_activated = get_config(chat_id, "resumen_diario_activado") == '1'
+    current_activated = get_config(chat_id, "daily_brief_activated") == '1'
     new_state = '0' if current_activated else '1'
-    set_config(chat_id, "resumen_diario_activado", new_state)
+    set_config(chat_id, "daily_brief_activated", new_state)
 
     # --- ¡LÓGICA DE EVENTOS! ---
     if new_state == '1':
         # Si se activa, leemos la hora y la TZ y programamos el job
-        hour = get_config(chat_id, "resumen_diario_hora") or "08:00"
+        hour = get_config(chat_id, "daily_brief_hour") or "08:00"
         tz = get_config(chat_id, "user_timezone") or "UTC"
         schedule_daily_brief(chat_id, hour, tz)
     else:
@@ -404,9 +404,9 @@ async def save_daily_brief_time(update: Update, context: ContextTypes.DEFAULT_TY
         return AWAITING_BRIEF_TIME # Mantenemos al usuario en este paso
 
     # Si el formato es correcto, guardamos y reprogramamos
-    set_config(chat_id, "resumen_diario_hora", written_time)
+    set_config(chat_id, "daily_brief_hour", written_time)
     
-    if get_config(chat_id, "resumen_diario_activado") == '1':
+    if get_config(chat_id, "daily_brief_activated") == '1':
         tz = get_config(chat_id, "user_timezone") or "UTC"
         schedule_daily_brief(chat_id, written_time, tz)
     
@@ -434,12 +434,12 @@ settings_handler = ConversationHandler(
         ],
         SAFE_MODE_MENU: [
             CallbackQueryHandler(receive_level_callback, pattern=r"^safe_level:\d$"),
-            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_main$"),
+            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_menu$"),
         ],
         TIMEZONE_MENU: [
             CallbackQueryHandler(tz_auto_method, pattern="^tz_auto$"),
             CallbackQueryHandler(tz_manual_method, pattern="^tz_manual$"),
-            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_main$"),
+            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_menu$"),
         ],
         AWAITING_LOCATION: [
             MessageHandler(filters.LOCATION, receive_ubi),
@@ -454,7 +454,7 @@ settings_handler = ConversationHandler(
         DAILY_BRIEF_MENU: [
             CallbackQueryHandler(toggle_daily_brief, pattern="^daily_brief_toggle$"),
             CallbackQueryHandler(ask_daily_brief_time, pattern="^daily_brief_change_time$"),
-            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_main$"),
+            CallbackQueryHandler(back_to_main_settings_menu, pattern="^settings_back_to_menu$"),
         ],
         AWAITING_BRIEF_TIME: [
             MessageHandler(filters.TEXT & ~filters.COMMAND, save_daily_brief_time),

@@ -69,6 +69,6 @@ def cancel_daily_brief(chat_id: int):
     try:
         if scheduler.get_job(job_id):
             scheduler.remove_job(job_id)
-            print(f"🗓️ Resumen diario cancelado para el usuario {chat_id}")
+            print(f"🗓️  Resumen diario cancelado para el usuario {chat_id}")
     except Exception as e:
         print(f"🚨 Error al cancelar el resumen para {chat_id}: {e}")

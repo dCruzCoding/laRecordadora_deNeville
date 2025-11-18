@@ -168,7 +168,7 @@ async def execute_change(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # 5. Si hay recordatorios para reprogramar, iniciamos el sub-flujo.
     if reschedulable:
-        context.user_data["reprogramar_lista"] = reschedulable
+        context.user_data["reschedule_list"] = reschedulable
         first_reminder = reschedulable[0]
         reschedule_message = (f"🗓️ Has reactivado el recordatorio `#{first_reminder['user_id']}` - _{first_reminder['text']}_.\n\n"
                                f"{get_text('recordar_pide_aviso')}")
@@ -194,7 +194,7 @@ async def receive_new_alert_time(update: Update, context: ContextTypes.DEFAULT_T
     # Guardamos el nuevo aviso_previo en la DB
     with get_connection() as conn:
         # CAMBIO: Placeholder a %s
-        conn.cursor().execute("UPDATE reminders SET alert = %s WHERE id = %s", (minutes, current_reminder["global_id"]))
+        conn.cursor().execute("UPDATE reminders SET pre_alert = %s WHERE id = %s", (minutes, current_reminder["global_id"]))
 
     # Programamos el aviso con la nueva configuración
     await schedule_alerts(        
@@ -205,7 +205,7 @@ async def receive_new_alert_time(update: Update, context: ContextTypes.DEFAULT_T
         current_reminder["datetime"],
         minutes
     )
-    confirmation_message = get_text("alert_rescheduled", id=current_reminder['user_id']) # <-- CAMBIO
+    confirmation_message = get_text("aviso_reprogramado", id=current_reminder['user_id'])
     await update.message.reply_text(confirmation_message, parse_mode="Markdown") 
 
     # Si quedan más recordatorios por reprogramar, preguntamos por el siguiente
