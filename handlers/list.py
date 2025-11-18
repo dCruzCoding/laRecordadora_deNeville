@@ -134,7 +134,13 @@ async def unified_clean_callback(update: Update, context: ContextTypes.DEFAULT_T
     
     # Formato: "accion:filtro" -> ej: "limpiar:pasados_ask", "limpiar:hechos_confirm"
     action, filter_data = query.data.split(":")
-    filter_type, step = filter_data.split("_") # 'pasados', 'ask'
+    if "_" in filter_data:
+        filter_type, step = filter_data.split("_", 1) # Usamos maxsplit=1 por seguridad
+    else:
+        # Si no hay '_', asumimos que es el primer paso ('ask') y que
+        # filter_data es solo el tipo de filtro (ej: 'past' o 'done').
+        filter_type = filter_data
+        step = "ask"
 
     # Textos dinámicos según el filtro
     texts = {
