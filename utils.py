@@ -371,7 +371,7 @@ async def send_pinned_list(update: Update, context: ContextTypes.DEFAULT_TYPE, p
         
         # --- Construcción de la lista ---
         message_list = []
-        for pinned_id, text, time, days in pinned_page:
+        for pinned_id, text, time, _, days in pinned_page:
             days_str = format_week_days(days)
             message_list.append(f"{text} (a las {time.strftime('%H:%M')})")
             message_list.append(f"  └─ 📍 {days_str}")

@@ -11,6 +11,9 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 #### ✨ Mejoras
 
+-   **Borrado múltiple para recordatorios fijos** *(v1.8.1.2)***:** Se ha mejorado el flujo de borrado del comando `/fijo`.
+    -   Ahora los usuarios pueden introducir múltiples IDs separados por espacios (ej: `#1 #3 #5`) para borrar varios recordatorios fijos de una sola vez.
+  
 -   **Refactorización de la capa de datos y activación de RLS** *(v1.8.1.2)***:** Se ha llevado a cabo una re-arquitectura masiva de la interacción con la base de datos para mejorar la seguridad y la robustez del bot.
     -   **Centralización del acceso a datos:** Se ha movido toda la lógica de la base de datos a un único módulo (`db.py`), eliminando código duplicado y estableciendo un punto de control de seguridad único para todas las operaciones.
     -   **Activación de Seguridad a Nivel de Fila (RLS):** Se ha activado RLS en Supabase para todas las tablas de usuario. Esto añade una capa de seguridad crítica directamente en la base de datos, garantizando que un usuario nunca pueda acceder a los datos de otro, incluso en caso de un bug en la aplicación.
@@ -23,6 +26,9 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 #### 🐛 Problemas resueltos
 
+-   **_E023_ - Error al listar recordatorios fijos (`ValueError: too many values to unpack`).** *(v1.8.1.2)*
+    -   **Problema:** Una refactorización en la capa de datos (`db.py`) provocó que la función `get_pinned_by_chat_id` devolviera una columna extra (`timezone`). El código que mostraba las listas en `/fijo` y `/lista fijos` no estaba preparado para recibir este dato adicional, causando un error al intentar desempaquetar los resultados.
+    -   **Solución:** Se han actualizado los bucles en `handlers/pinned.py` y `utils.py` para que manejen correctamente la estructura de datos actualizada, resolviendo el error.
 -   **_E022_ - El uso de `list` en lugar de `tuple` causaba errores de sintaxis SQL.** *(v1.8.1.2)*
     -   **Problema:** En varios handlers, se pasaba una `lista` de IDs a las funciones de `db.py`. La librería `psycopg2` convertía esto a la sintaxis `ARRAY[...]` de PostgreSQL, que no es válida para la cláusula `IN`, provocando un `psycopg2.errors.SyntaxError`.
     -   **Solución:** Se han modificado los handlers para pasar siempre una `tupla` de IDs, que `psycopg2` convierte correctamente a la sintaxis `(...)` que el operador `IN` espera.

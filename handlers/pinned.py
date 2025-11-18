@@ -8,7 +8,7 @@ from telegram.ext import (
 
 from db import (
     get_config, add_pinned_reminder, get_pinned_by_chat_id,
-    update_pinned_by_id, delete_pinned_by_id, check_pinned_exists
+    update_pinned_by_id, delete_pinned_by_ids, check_pinned_exists
 )
 from utils import (
     cancel_callback, unexpected_command, cancel_conversation,
@@ -70,7 +70,7 @@ async def _show_pinned_list(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         return False
     
     message_list = [intro_text]
-    for pinned_id, text, hour, days in pinned:   # Ahora 'dias' es una cadena como "mon,tue,fri"
+    for pinned_id, text, hour, _, days in pinned:   # Ahora 'dias' es una cadena como "mon,tue,fri"
         # Hacemos la conversión inversa para mostrar las letras
         days_str = format_week_days(days)
         message_list.append(f"`#{pinned_id}`: {text} (a las {hour.strftime('%H:%M')})")
@@ -179,48 +179,60 @@ async def pinned_ask_id_to_delete(update: Update, context: ContextTypes.DEFAULT_
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("🗑️ **Borrar Recordatorio Fijo**", parse_mode="Markdown")
-    if await _show_pinned_list(update, context, "Dime el ID del recordatorio fijo que quieres borrar:\n"):
+    
+    # Se actualiza el texto para indicar que se pueden borrar varios.
+    prompt_text = "Dime el/los ID(s) del recordatorio fijo que quieres borrar (separados por espacios):\n"
+    
+    if await _show_pinned_list(update, context, prompt_text):
         return CHOOSE_ID_TO_DELETE
     return ConversationHandler.END
 
 async def pinned_process_id_to_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """
-    Recibe el ID a borrar, lo valida y, si el Modo Seguro está activo, pide confirmación.
-    Si no, borra directamente.
+    Recibe uno o más IDs, los valida y, si el Modo Seguro está activo, pide confirmación.
     """
     chat_id = update.effective_chat.id
+    
+    # 1. Parseamos la entrada del usuario para obtener una tupla de IDs numéricos.
     try:
-        pinned_id = int(update.message.text.strip().replace("#", ""))
+        ids_to_check = tuple(int(part.replace("#", "")) for part in update.message.text.split())
+        if not ids_to_check: raise ValueError
     except ValueError:
-        await update.message.reply_text("Por favor, introduce solo un número.")
+        await update.message.reply_text("Por favor, introduce uno o más números de ID separados por espacios.")
         return CHOOSE_ID_TO_DELETE
 
-    # Validamos que el ID existe y pertenece al usuario
-    pinned = get_pinned_by_chat_id(chat_id)
-    reminder_to_delete = next((f for f in pinned if f[0] == pinned_id), None)
-
-    if not reminder_to_delete:
-        await update.message.reply_text(f"❌ No he encontrado un recordatorio fijo con el ID #{pinned_id}.")
+    # 2. Validamos los IDs contra los que realmente existen para este usuario.
+    all_pinned = get_pinned_by_chat_id(chat_id)
+    all_existing_ids = {p[0] for p in all_pinned} # Usamos un set para búsquedas rápidas.
+    valid_ids_to_delete = {id_ for id_ in ids_to_check if id_ in all_existing_ids} # -> {1, 5}
+    
+    if not valid_ids_to_delete:
+        await update.message.reply_text("❌ No he encontrado ningún recordatorio con esos IDs.")
         return CHOOSE_ID_TO_DELETE
+    
+    # 3. Ahora que tenemos los IDs válidos, filtramos la lista original para obtener la información completa de esos recordatorios.
+    reminders_to_delete = [p for p in all_pinned if p[0] in valid_ids_to_delete]
 
-    # Guardamos el ID en el contexto para el siguiente paso
-    context.user_data["pinned_id_to_delete"] = pinned_id
+    # 4. Guardamos la lista de recordatorios (completos) para el siguiente paso.
+    context.user_data["pinned_reminders_to_delete"] = reminders_to_delete
 
-    # --- LÓGICA DE MODO SEGURO ---
+    # --- LÓGICA DE MODO SEGURO (adaptada para múltiples recordatorios) ---
     safe_mode = int(get_config(chat_id, "safe_mode") or 0)
-    if safe_mode in (1, 3): # Niveles que requieren confirmación de borrado
-        _, text, hour, days = reminder_to_delete
-        days_str = format_week_days(days) # Reutilizamos la función que ya tienes
+    if safe_mode in (1, 3):
+        message_lines = []
+        for pinned_id, text, hour, _, days in reminders_to_delete:
+            days_str = format_week_days(days)
+            message_lines.append(f"  - `#{pinned_id}`: {text} (a las {hour.strftime('%H:%M')}) [{days_str}]")
         
         confirmation_message = (
-            f"👵 ¡Quieto ahí! Vas a borrar permanentemente el recordatorio fijo:\n\n"
-            f"  - `#{pinned_id}`: {text} (a las {hour.strftime('%H:%M')}) [{days_str}]\n\n"
+            f"👵 ¡Quieto ahí! Vas a borrar permanentemente los siguientes recordatorios fijos:\n\n"
+            f"{'\n'.join(message_lines)}\n\n"
             "¿Estás completamente seguro? Escribe `SI` para confirmar."
         )
         await update.message.reply_text(confirmation_message, parse_mode="Markdown")
         return CONFIRM_DELETE
     else:
-        # Si no se requiere confirmación, borramos directamente
+        # Si no se requiere confirmación, borramos directamente.
         return await _execute_delete_pinned(update, context)
 
 async def pinned_confirm_and_delete(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -234,23 +246,27 @@ async def pinned_confirm_and_delete(update: Update, context: ContextTypes.DEFAUL
         return ConversationHandler.END
 
 async def _execute_delete_pinned(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Lógica final que realiza el borrado en la DB y el scheduler."""
-    pinned_id = context.user_data.get("pinned_id_to_delete")
-    if pinned_id is None: # Salvaguarda
+    """Lógica final que realiza el borrado de múltiples IDs en la DB y resincroniza el scheduler."""
+    reminders_to_delete = context.user_data.get("pinned_reminders_to_delete")
+    if not reminders_to_delete:
         return ConversationHandler.END
     
+    # 1. Extraemos solo los IDs para pasarlos a la función de borrado.
+    pinned_ids_to_delete = tuple(r[0] for r in reminders_to_delete)
+    
     chat_id = update.effective_chat.id
-    num_deleted = delete_pinned_by_id(chat_id, pinned_id)
+    # 2. Llamamos a nuestra nueva función de borrado en lote.
+    num_deleted = delete_pinned_by_ids(chat_id, pinned_ids_to_delete)
 
     if num_deleted > 0:
-        # En lugar de cancelar solo este, resincronizamos todo.
-        # Esto es más seguro y limpia cualquier posible estado inconsistente.
+        # 3. Resincronizamos todo el scheduler para este usuario.
         reschedule_all_pinned_for_chat(chat_id)
 
-        await update.message.reply_text(f"✅ Recordatorio fijo `#{pinned_id}` borrado permanentemente.")
+        # 4. Creamos un mensaje de confirmación dinámico.
+        deleted_ids_str = ", ".join(f"`#{pid}`" for pid in pinned_ids_to_delete)
+        await update.message.reply_text(f"✅ Recordatorio(s) fijo(s) {deleted_ids_str} borrado(s) permanentemente.")
     else:
-        # Este mensaje no debería aparecer si la validación previa funcionó
-        await update.message.reply_text(f"❌ No he encontrado un recordatorio fijo con el ID #{pinned_id}.")
+        await update.message.reply_text("❌ No se ha podido borrar ningún recordatorio. Puede que ya no existieran.")
         
     context.user_data.clear()
     return ConversationHandler.END

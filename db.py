@@ -349,12 +349,23 @@ def update_pinned_by_id(chat_id: int, pinned_id: int, new_text: str, new_time: s
                 "UPDATE pinned_reminders SET text = %s, local_time = %s, week_days = %s WHERE id = %s",
                 (new_text, new_time, new_days, pinned_id)
             )
-def delete_pinned_by_id(chat_id: int, pinned_id: int) -> int:
-    """Borra un recordatorio fijo por su ID y devuelve el número de filas borradas."""
+            
+def delete_pinned_by_ids(chat_id: int, pinned_ids: tuple) -> int:
+    """
+    Borra uno o más recordatorios fijos por sus IDs y devuelve el número de filas borradas.
+    Usa la cláusula IN para una operación en lote eficiente.
+    """
     with get_connection() as conn:
         with conn.cursor() as cursor:
+            # RLS Ready
             cursor.execute("SET LOCAL app.current_chat_id = %s", (str(chat_id),))
-            cursor.execute("DELETE FROM pinned_reminders WHERE id = %s", (pinned_id,))
+            
+            # Usamos 'IN %s' y pasamos una tupla de IDs.
+            # El WHERE chat_id es una capa extra de seguridad.
+            cursor.execute(
+                "DELETE FROM pinned_reminders WHERE id IN %s AND chat_id = %s", 
+                (pinned_ids, chat_id)
+            )
             return cursor.rowcount
         
 
