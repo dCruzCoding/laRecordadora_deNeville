@@ -53,8 +53,9 @@ Para obtener una guía detallada y paso a paso sobre cómo configurar el entorno
 -   **/start**: Inicia la conversación con la abuela y comienza el proceso de bienvenida si es tu primera vez.
 -   **/ayuda**: Muestra la lista completa de comandos disponibles.
 -   **/info**: Vuelve a mostrar la guía de uso sobre cómo añadir y gestionar recordatorios.
--   **/lista**: Muestra todos tus recordatorios con una interfaz interactiva.
+-   **/lista**: Muestra tus recordatorios con una interfaz interactiva.
 -   **/recordar**: Crea un nuevo recordatorio. El bot te guiará para añadir un aviso previo.
+-   **/fijos**: Te permite gestionar recordatorios diarios.
 -   **/borrar**: Inicia una conversación para eliminar uno o más recordatorios.
 -   **/cambiar**: Abre la interfaz para cambiar el estado de un recordatorio (de `pendiente` a `hecho` o viceversa).
 -   **/editar**: Inicia una conversación para modificar un recordatorio existente (contenido o aviso).
@@ -81,7 +82,7 @@ Para agilizar el uso, la mayoría de los comandos de gestión aceptan argumentos
 
 ## 🏛️ Arquitectura y Versionado
 
-Este proyecto utiliza **Tags de Git** para marcar los lanzamientos de versiones estables. La rama `main` siempre contiene la última versión funcional y probada ***(actualmente v1.8.0)***.
+Este proyecto utiliza **Tags de Git** para marcar los lanzamientos de versiones estables. La rama `main` siempre contiene la última versión funcional y probada ***(actualmente v1.8.1)***.
 
 Puedes ver una lista de todas las versiones en la sección de **"Tags"** o **"Releases"** del repositorio en GitHub. Además, consultando el archivo consulta el archivo **[CHANGELOG.md](CHANGELOG.md)** puede explorar un historial detallado de cada versión con información sobre los cambios, mejoras y decisiones de diseño.
 

@@ -6,12 +6,29 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
+
+### [v1.8.1] - 2025-11-18
+
+#### ✨ Mejoras
+
+-   **Refactorización del código base al Inglés:** Se ha realizado una refactorización exhaustiva para estandarizar todos los identificadores del código al inglés.
+    -   **Alcance:** La traducción se ha aplicado a nombres de **variables, funciones, clases y archivos**.
+    -   **Objetivo:** Este cambio elimina el "Spanglish" y mejora significativamente la legibilidad, consistencia y mantenibilidad del proyecto, facilitando futuras colaboraciones y desarrollo.
+    -   **Aclaración:** Esta es una mejora interna orientada al desarrollador. Los **comentarios del código, la documentación y toda la interfaz de interacción con el usuario permanecen en español**.
+
+#### 🐛 Problemas resueltos
+
+-   **_E020_ - El contenido del str con los comandos ("ayuda_base" en personality.py) daba error.**
+    -   **Problema:** El texto contenía demasiados carácteres especiales de Markdown (-, ., (, )), lo que provocaba un error Can't parse entities. Un intento inicial de solución con dobles barras (\\) resolvía el error pero mostraba barras extra en el mensaje final.
+    -   **Solución:** Simplemente se redujo el número de carácteres especiales reescribiendo el texto de forma más simple.
+
+
 ### [v1.8.0] - 2025-11-17
 
 #### ✨ Mejoras
 
 -   **Implementación de Recordatorios Fijos (Pinned Reminders) con selección de días:** Se ha añadido una nueva funcionalidad principal para gestionar tareas diarias de forma flexible.
-    -   **Nuevo comando `/fijo`:** Se ha introducido el comando `/fijo` (con alias como `/fijos`, `/recurrente`) que abre un menú de gestión exclusivo para **Añadir, Editar y Borrar** recordatorios recurrentes.
+    -   **Nuevo comando `/fijo`:** Se ha introducido el comando `/fijo` (con alias como `/fijos`, `/pinned`) que abre un menú de gestión exclusivo para **Añadir, Editar y Borrar** recordatorios recurrentes.
     -   **Selección de días de la semana:** El flujo de creación y edición ahora incluye un teclado interactivo para que el usuario elija en qué días específicos de la semana quiere que se repita el recordatorio (ej: solo Lunes y Miércoles, Fines de semana, etc.).
     -   **Listado separado:** Se ha creado el comando `/lista fijos` para consultar una lista clara y dedicada de todos los recordatorios fijos configurados, separándolos de la lista de tareas puntuales.
     -   **Formato inteligente:** La visualización de los días se ha mejorado para reconocer y mostrar patrones comunes como "Todos los días", "Entre semana" o "Fines de semana".
