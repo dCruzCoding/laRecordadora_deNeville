@@ -154,7 +154,7 @@ async def ask_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         date_local = convert_utc_to_local(datetime_utc, info.get("timezone") or user_tz)
         date_str = date_local.strftime("%d %b, %H:%M")
         
-    message = get_text("editar_pide_recordatorio_nuevo", current_text=info.get("texto", ""), current_date=date_str)
+    message = get_text("editar_pide_recordatorio_nuevo", current_text=info.get("text", ""), current_date=date_str)
     await query.edit_message_text(text=message, parse_mode="Markdown")
     return EDIT_REMINDER
 
@@ -220,7 +220,7 @@ async def ask_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     with get_connection() as conn:
         with conn.cursor() as cursor:
             # Placeholder >> %s
-            cursor.execute("SELECT stat, datetime FROM reminders WHERE id = %s", (info.get("global_id"),))
+            cursor.execute("SELECT status, datetime FROM reminders WHERE id = %s", (info.get("global_id"),))
             current_reminder = cursor.fetchone()
     
     if current_reminder:
@@ -275,7 +275,7 @@ async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         # CAMBIO: Usamos directamente el objeto datetime guardado.
         date = info["datetime_utc"]
         alert_was_scheduled = await schedule_alerts(
-            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["texto"], date, minutes
+            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["text"], date, minutes
         )
         if alert_was_scheduled:
             with get_connection() as conn:
