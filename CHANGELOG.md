@@ -7,7 +7,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
 
-### [v1.8.1] - 2025-11-18
+### [v1.8.1.1] - 2025-11-18
 
 #### ✨ Mejoras
 
@@ -18,6 +18,9 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 #### 🐛 Problemas resueltos
 
+-   **_E021_ - La función de "Limpiar Pasados/Hechos" fallaba con un error de base de datos.** *(v1.8.1.1)*
+    -   **Problema:** Al intentar borrar recordatorios filtrados, la función `delete_reminders_filtered` en `db.py` ejecutaba una consulta SQL que carecía de la cláusula que indicaba de qué tabla obtener la info. Esto causaba que PostgreSQL devolviera un error porque no saber dónde obtener los IDs.
+    -   **Solución:** Se corrigió la consulta SQL añadiendo la cláusula `FROM reminders`, especificando así la tabla correcta y permitiendo que la función de borrado opere como se esperaba.
 -   **_E020_ - El contenido del str con los comandos ("ayuda_base" en personality.py) daba error.**
     -   **Problema:** El texto contenía demasiados carácteres especiales de Markdown (-, ., (, )), lo que provocaba un error Can't parse entities. Un intento inicial de solución con dobles barras (\\) resolvía el error pero mostraba barras extra en el mensaje final.
     -   **Solución:** Simplemente se redujo el número de carácteres especiales reescribiendo el texto de forma más simple.

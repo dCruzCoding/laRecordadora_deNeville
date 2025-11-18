@@ -160,13 +160,6 @@ def get_all_chat_ids() -> List[int]:
 def delete_reminders_filtered(chat_id: int, filter_type: str) -> tuple[int, List[int]]:
     """
     Función universal para eliminar recordatorios de un usuario basándose en un filtro.
-
-    Args:
-        chat_id (int): El ID del chat del usuario.
-        filtro (str): El criterio para borrar. Puede ser "pasados" o "hechos".
-
-    Returns:
-        tuple: (Número de recordatorios borrados, Lista de IDs de los recordatorios borrados).
     """
     with get_connection() as conn:
         with conn.cursor() as cursor:
@@ -182,7 +175,8 @@ def delete_reminders_filtered(chat_id: int, filter_type: str) -> tuple[int, List
                 return 0, []
 
             # 1. Obtenemos los IDs de los recordatorios que vamos a borrar.
-            cursor.execute(f"SELECT id {sql_where}", params)
+            cursor.execute(f"SELECT id FROM reminders {sql_where}", params)
+            
             ids_to_delete = [item[0] for item in cursor.fetchall()]
 
             if not ids_to_delete:
