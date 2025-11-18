@@ -84,44 +84,43 @@ TEXTS: Dict[str, List[str]] = {
     ],
 
     "ayuda_base": [
-        "*📖 Comandos de La Recordadora*\n¡Presta atención, no me hagas repetírtelo! \n\n"
-        "--- COMANDOS GENERALES ---\n"
-        "🙋 /start – Para saludar como es debido. \n"
-        "🆘 /ayuda (o /help) – Para ver esto otra vez, por si se te olvida.\n"
-        "🧙 /info (/intro) – Para que te vuelva a explicar cómo funciono.\n\n"
 
-        "--- GESTIÓN DE TAREAS ---\n"
-        "📜 **/lista** (/list) – Abre tu centro de mandos. ¡Y más te vale usar los filtros!\n"
-        "       └─ `pasados`, `hechos` o `pendientes` para filtrar la vista (ej: `/lista pasados`).\n"
-        "       └─ `fijos` para ver solo los que se repiten (ej: `/lista fijos`).\n\n"
+    "*📖 Comandos de La Recordadora*\n"
+    "¡Presta atención, no me hagas repetírtelo! \n\n"
 
-        "⏰ **/recordar** – Para añadir una nueva tarea a tu lista de desastres.\n"
-        "       └─ También entiendo: `/recordatorio`, `/recordatorios`, `/add`.\n"
-        "       └─ Tiene modo rápido: /recordar fecha-hora*texto.\n\n"
+    "--- *COMANDOS GENERALES* ---\n"
+    "🙋 */start* – Para saludar como es debido. \n"
+    "🆘 */ayuda* (o help) – Para ver esto otra vez, por si se te olvida.\n"
+    "🧙 */info* (intro) – Para que te vuelva a explicar cómo funciono.\n\n"
 
-        "📌 **/fijo** – Abre el menú para gestionar esas tareas que repites sin parar (añadir, editar y borrar).\n"
-        "       └─ También entiendo: `/fijos`, `/recurrente`, `/recurrentes`, `/pinned`.\n\n"
+    "--- *GESTIÓN DE TAREAS* ---\n"
+    "📜 */lista* (list) – Abre tu centro de mandos. ¡Y más te vale usar los filtros!\n"
+    "  > `pasados`, `hechos` o `pendientes` para filtrar la vista (ej: `/lista pasados`).\n"
+    "  > `fijos` para ver solo los que se repiten (ej: `/lista fijos`).\n\n"
+    "⏰ */recordar* – Para añadir una nueva tarea a tu lista de desastres.\n"
+    "  > También entiendo: `recordatorio`, `recordatorios`, `add`.\n"
+    "  > Tiene modo rápido: \n`/recordar fecha-hora*texto`.\n\n"
+    "📌 */fijo* – Abre el menú para gestionar esas tareas que repites sin parar (añadir, editar y borrar).\n"
+    "  > También: `fijos`, `recurrente`, `recurrentes`, `pinned`.\n\n"
+    "🗑️ */borrar* – Para quitar algo que (con suerte) ya has hecho.\n"
+    "  > También: `delete`, `del`, `bor`.\n"
+    "  > Modo rápido: /borrar ID1 ID2 ...\n\n"
+    "🔄 */cambiar* – Para marcar una tarea como hecha o pendiente.\n"
+    "  > También: `change`, `hecho`, `done`, `check`.\n"
+    "  > Modo rápido: /cambiar ID1 ID2 ...\n\n"
+    "🪄 */editar* – Para modificar un recordatorio que ya has creado.\n"
+    "  > También: `edit`, `modificar`, `mod`.\n"
+    "  > Modo rápido: /editar ID1.\n\n"
 
-        "🗑️ **/borrar** – Para quitar algo que (con suerte) ya has hecho.\n"
-        "       └─ También entiendo: `/delete`, `/del`, `/bor`.\n"
-        "       └─ Modo rápido: /borrar ID1 ID2 ...\n\n"
-
-        "🔄 **/cambiar** – Para marcar una tarea como hecha o pendiente.\n"
-        "       └─ También entiendo: `/change`, `/hecho`, `/done`, `/check`.\n"
-        "       └─ Modo rápido: /cambiar ID1 ID2 ...\n\n"
-
-        "🪄 **/editar** – Para modificar un recordatorio que ya has creado.\n"
-        "       └─ También entiendo: `/edit`, `/modificar`, `/mod`.\n"
-        "       └─ Modo rápido: /editar ID1 .\n\n"
-        
-        "--- OTROS COMANDOS ---\n"
-        "⚙️ /ajustes (/config) – Para personalizar tus manías: modo seguro, zona horaria y el resumen mañanero.\n"
-        "❌ /cancelar – Para que dejes de hacer lo que estabas haciendo."
+    "--- *OTROS COMANDOS* ---\n"
+    "⚙️ */ajustes* (config) – Para personalizar tus manías: modo seguro, zona horaria y el resumen mañanero.\n"
+    "❌ */cancelar* – Para que dejes de hacer lo que estabas haciendo."
     ],
 
 
     "ayuda_admin": [
-        "\n\n⚠️ /reset – ¡Ni se te ocurra tocar esto si no sabes lo que haces!",
+        "\n\n\n *¡OJO! ESTO SÓLO PARA EL ADMIN*"
+        "\n\n⚠️ */reset* – ¡Ni se te ocurra tocar esto si no sabes lo que haces!",
     ],
     "lista_vacia": [
         "📭 ¿No tienes nada pendiente? ¡Increíble! Debes haber usado un giratiempo. O eso, o no estás haciendo suficientes cosas importantes. ¡No te acomodes!",
