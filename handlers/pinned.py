@@ -40,8 +40,53 @@ def _build_days_keyboard(dias_seleccionados: set) -> InlineKeyboardMarkup:
         row.append(InlineKeyboardButton(button_text, callback_data=f"pinned_day_{WEEK_DAYS_MAP[day_letter]}"))
     keyboard_rows.append(row)
     keyboard_rows.append([InlineKeyboardButton("🗓️ Todos los días", callback_data="pinned_day_all")])
-    keyboard_rows.append([InlineKeyboardButton("✅ ¡Listo!", callback_data="pinned_days_done")])
+    keyboard_rows.append([
+        InlineKeyboardButton("✅ ¡Listo!", callback_data="pinned_days_done"),
+        InlineKeyboardButton("❌ Cancelar", callback_data="pinned_cancel")
+    ])
     return InlineKeyboardMarkup(keyboard_rows)
+
+# =============================================================================
+# PUNTOS DE ENTRADA DIRECTA
+# =============================================================================
+
+async def pinned_add_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Punto de entrada directo para añadir un recordatorio fijo con /fijo_añadir."""
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="➕ **Añadir Recordatorio Fijo**\n\n**Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`.\n\n_(Escribe /cancelar para salir)_",
+        parse_mode="Markdown"
+    )
+    return ADD_ASK_DATA
+
+async def pinned_edit_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Punto de entrada directo para editar un recordatorio fijo con /fijos_editar."""
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="✍️ **Editar Recordatorio Fijo**",
+        parse_mode="Markdown"
+    )
+    # Reutilizamos la función que muestra la lista
+    if await _show_pinned_list(update, context, "Dime el ID del recordatorio fijo que quieres editar:\n\n_(Escribe /cancelar para salir)_\n"):
+        return CHOOSE_ID_TO_EDIT
+    
+    # Si no hay recordatorios, _show_pinned_list ya envía un mensaje. Terminamos la conversación.
+    return ConversationHandler.END
+
+async def pinned_delete_entry(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Punto de entrada directo para borrar un recordatorio fijo con /fijo_borrar."""
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        text="🗑️ **Borrar Recordatorio Fijo**",
+        parse_mode="Markdown"
+    )
+    # Reutilizamos la función que muestra la lista
+    prompt_text = "Dime el/los ID(s) del recordatorio fijo que quieres borrar (separados por espacios):\n\n_(Escribe /cancelar para salir)_\n"
+    if await _show_pinned_list(update, context, prompt_text):
+        return CHOOSE_ID_TO_DELETE
+    
+    # Si no hay recordatorios, _show_pinned_list ya envía un mensaje. Terminamos la conversación.
+    return ConversationHandler.END
 
 # =============================================================================
 # FUNCIONES DE LA CONVERSACIÓN
@@ -79,14 +124,14 @@ async def _show_pinned_list(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     await context.bot.send_message(chat_id, "\n".join(message_list), parse_mode="Markdown")
     return True
 
-# --- Flujo de Añadir (Ahora en 2 pasos) ---
+# --- Flujo de Añadir ---
 async def pinned_ask_data_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("➕ **Añadir Recordatorio Fijo**", parse_mode="Markdown")
     await context.bot.send_message(
         chat_id=update.effective_chat.id,
-        text="**Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`.",
+        text="**Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`.\n\n_(Escribe /cancelar para salir)_",
         parse_mode="Markdown"
     )
     
@@ -96,7 +141,7 @@ async def pinned_receive_data_add(update: Update, context: ContextTypes.DEFAULT_
     user_input = update.message.text
     match = re.match(r"^\s*(\d{1,2}:\d{2})\s*\*\s*(.+)$", user_input, re.DOTALL)
     if not match:
-        await update.message.reply_text("❗ Formato incorrecto. Usa `HH:MM * Texto`.")
+        await update.message.reply_text("❗ Formato incorrecto. Usa `HH:MM * Texto` _(o escribe /cancelar para salir)_.")
         return ADD_ASK_DATA
     
     context.user_data['add_pinned_hour'], context.user_data['add_pinned_text'] = match.groups()
@@ -181,7 +226,7 @@ async def pinned_ask_id_to_delete(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text("🗑️ **Borrar Recordatorio Fijo**", parse_mode="Markdown")
     
     # Se actualiza el texto para indicar que se pueden borrar varios.
-    prompt_text = "Dime el/los ID(s) del recordatorio fijo que quieres borrar (separados por espacios):\n"
+    prompt_text = "Dime el/los ID(s) del recordatorio fijo que quieres borrar (separados por espacios):\n\n_(Escribe /cancelar para salir)_\n"
     
     if await _show_pinned_list(update, context, prompt_text):
         return CHOOSE_ID_TO_DELETE
@@ -198,7 +243,7 @@ async def pinned_process_id_to_delete(update: Update, context: ContextTypes.DEFA
         ids_to_check = tuple(int(part.replace("#", "")) for part in update.message.text.split())
         if not ids_to_check: raise ValueError
     except ValueError:
-        await update.message.reply_text("Por favor, introduce uno o más números de ID separados por espacios.")
+        await update.message.reply_text("Por favor, introduce uno o más números de ID separados por espacios _(o escribe /cancelar para salir)_.")
         return CHOOSE_ID_TO_DELETE
 
     # 2. Validamos los IDs contra los que realmente existen para este usuario.
@@ -207,7 +252,7 @@ async def pinned_process_id_to_delete(update: Update, context: ContextTypes.DEFA
     valid_ids_to_delete = {id_ for id_ in ids_to_check if id_ in all_existing_ids} # -> {1, 5}
     
     if not valid_ids_to_delete:
-        await update.message.reply_text("❌ No he encontrado ningún recordatorio con esos IDs.")
+        await update.message.reply_text("❌ No he encontrado ningún recordatorio con esos IDs. Prueba de nuevo o _escribe /cancelar para salir_")
         return CHOOSE_ID_TO_DELETE
     
     # 3. Ahora que tenemos los IDs válidos, filtramos la lista original para obtener la información completa de esos recordatorios.
@@ -276,7 +321,7 @@ async def pinned_ask_id_to_edit(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     await query.answer()
     await query.edit_message_text("✍️ **Editar Recordatorio Fijo**", parse_mode="Markdown")
-    if await _show_pinned_list(update, context, "Dime el ID del recordatorio fijo a editar:\n"):
+    if await _show_pinned_list(update, context, "Dime el ID del recordatorio fijo a editar:\n\n_(Escribe /cancelar para salir)_\n"):
         return CHOOSE_ID_TO_EDIT
     return ConversationHandler.END
 
@@ -288,20 +333,20 @@ async def pinned_ask_new_data(update: Update, context: ContextTypes.DEFAULT_TYPE
     try:
         pinned_id = int(update.message.text.strip().replace("#", ""))
     except ValueError:
-        await update.message.reply_text("Eso no es un número válido. Por favor, dime el ID del recordatorio que quieres editar:")
+        await update.message.reply_text("Eso no es un número válido. Por favor, dime el ID del recordatorio que quieres editar _(o escribe /cancelar para salir)_:")
         return CHOOSE_ID_TO_EDIT # Mantenemos al usuario en el paso de elegir ID
 
     if check_pinned_exists(pinned_id, chat_id):
         # El ID es válido y pertenece al usuario, procedemos.
         context.user_data["pinned_id_to_edit"] = pinned_id
         await update.message.reply_text(
-            "Entendido. **Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`.",
+            "Entendido. **Paso 1 de 2:** Escribe la nueva hora y texto con el formato `HH:MM * Texto`. \n\n_(Escribe /cancelar para salir)_",
             parse_mode="Markdown"
         )
         return RECEIVE_NEW_DATA
     else:
         # El ID no existe o no pertenece al usuario.
-        await update.message.reply_text(f"❌ No he encontrado ningún recordatorio fijo con el ID #{pinned_id}. Prueba de nuevo.")
+        await update.message.reply_text(f"❌ No he encontrado ningún recordatorio fijo con el ID #{pinned_id}. Prueba de nuevo o _escribe /cancelar para salir_.")
         return CHOOSE_ID_TO_EDIT # Devolvemos al usuario al paso anterior
     
 async def pinned_execute_edit(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -309,7 +354,7 @@ async def pinned_execute_edit(update: Update, context: ContextTypes.DEFAULT_TYPE
     user_input = update.message.text
     match = re.match(r"^\s*(\d{1,2}:\d{2})\s*\*\s*(.+)$", user_input, re.DOTALL)
     if not match:
-        await update.message.reply_text("❗ Formato incorrecto. Usa `HH:MM * Texto`.")
+        await update.message.reply_text("❗ Formato incorrecto. Usa `HH:MM * Texto` _(o escribe /cancelar para salir)_.")
         return RECEIVE_NEW_DATA
     
     # Guardamos los nuevos datos para el paso final
@@ -367,7 +412,15 @@ async def pinned_finalize_edit(update: Update, context: ContextTypes.DEFAULT_TYP
 # CONVERSATION HANDLER
 # =============================================================================
 pinned_handler = ConversationHandler(
-    entry_points= [CommandHandler(['fijo', 'fijos', 'recurrente', 'recurrentes', 'pinned'], pinned_cmd)],
+    entry_points= [
+        # Los atajos directos usando filtros Regex
+        MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:añadir|add)\s*$') & filters.COMMAND, pinned_add_entry),
+        MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:editar|edit)\s*$') & filters.COMMAND, pinned_edit_entry),
+        MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:borrar|delete)\s*$') & filters.COMMAND, pinned_delete_entry),
+
+        # Handler general
+        CommandHandler(['fijo', 'fijos', 'recurrente', 'recurrentes', 'pinned'], pinned_cmd),
+    ],
     states={
         PINNED_MENU: [
             CallbackQueryHandler(pinned_ask_data_add, pattern="^pinned_add$"),
@@ -381,6 +434,7 @@ pinned_handler = ConversationHandler(
         ADD_ASK_DAYS: [
             CallbackQueryHandler(pinned_receive_day_selection, pattern="^pinned_day_"),
             CallbackQueryHandler(pinned_finalize_add, pattern="^pinned_days_done$"),
+            CallbackQueryHandler(cancel_callback, pattern="^pinned_cancel$"),
         ],
 
         # --- Flujo de Borrar ---
@@ -391,10 +445,9 @@ pinned_handler = ConversationHandler(
         CHOOSE_ID_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, pinned_ask_new_data)],
         RECEIVE_NEW_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, pinned_execute_edit)],
         EDIT_ASK_DAYS: [
-            # ¡REUTILIZACIÓN! La función que maneja el clic en un día es la misma.
             CallbackQueryHandler(pinned_receive_day_selection, pattern="^pinned_day_"),
-            # Pero la función que finaliza es la específica de editar.
             CallbackQueryHandler(pinned_finalize_edit, pattern="^pinned_days_done$"),
+            CallbackQueryHandler(cancel_callback, pattern="^pinned_cancel$"),
         ],
     },
     fallbacks=[CommandHandler("cancelar", cancel_conversation),

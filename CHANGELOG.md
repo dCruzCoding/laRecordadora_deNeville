@@ -7,9 +7,12 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
 
-### [v1.8.1.2] - 2025-11-18
+### [v1.8.1.2] - 2025-11-19
 
 #### ✨ Mejoras
+
+-   **Atajos de comando para recordatorios fijos** *(v1.8.1.2)***:** Se han implementado subcomandos para agilizar la gestión de recordatorios fijos.
+    -   Ahora es posible saltarse el menú principal utilizando directamente `/fijo añadir`, `/fijo editar` o `/fijo borrar`, iniciando la acción deseada de forma inmediata.
 
 -   **Borrado múltiple para recordatorios fijos** *(v1.8.1.2)***:** Se ha mejorado el flujo de borrado del comando `/fijo`.
     -   Ahora los usuarios pueden introducir múltiples IDs separados por espacios (ej: `#1 #3 #5`) para borrar varios recordatorios fijos de una sola vez.

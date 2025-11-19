@@ -102,6 +102,7 @@ TEXTS: Dict[str, List[str]] = {
     "  > Tiene modo rápido: \n`/recordar fecha-hora*texto`.\n\n"
     "📌 */fijo* – Abre el menú para gestionar esas tareas que repites sin parar (añadir, editar y borrar).\n"
     "  > También: `fijos`, `recurrente`, `recurrentes`, `pinned`.\n\n"
+    "  > Puedes ir directo a la gestión añadiendolo al comando: ej. `/fijos añadir`.\n\n"
     "🗑️ */borrar* – Para quitar algo que (con suerte) ya has hecho.\n"
     "  > También: `delete`, `del`, `bor`.\n"
     "  > Modo rápido: /borrar ID1 ID2 ...\n\n"
