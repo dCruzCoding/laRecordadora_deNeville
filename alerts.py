@@ -66,14 +66,6 @@ def stop_scheduler():
 async def schedule_alerts(chat_id: int, reminder_id: str, user_id: int, text: str, datetime: datetime, pre_alert: int, is_snooze: bool = False) -> bool:
     """
     Programa el aviso principal y, si corresponde, el aviso previo para un recordatorio.
-
-    Args:
-        (Varios): Datos del recordatorio.
-        aviso_previo_min (int): Minutos de antelación para el aviso previo.
-
-    Returns:
-        bool: True si el aviso previo fue programado con éxito, False en caso contrario
-              (ya sea porque no se pidió o porque su hora ya había pasado).
     """
 
     pre_alert_scheduled = False  # Inicializamos la variable de retorno para evitar errores.

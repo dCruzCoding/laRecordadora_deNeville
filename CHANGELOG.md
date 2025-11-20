@@ -6,7 +6,6 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
-
 ### [v1.8.1.2] - 2025-11-19
 
 #### ✨ Mejoras
@@ -54,8 +53,8 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
     -   **Formato inteligente:** La visualización de los días se ha mejorado para reconocer y mostrar patrones comunes como "Todos los días", "Entre semana" o "Fines de semana".
 
 -   **Mejora de la experiencia de usuario (UX) y Usabilidad:**
-    -   **Alias para Comandos:** Se han añadido múltiples alias para los comandos principales (ej: `/help` para `/ayuda`, `/add` para `/recordar`, `/del` para `/borrar`) para hacer el bot más flexible e intuitivo.
-    -   **Documentación Actualizada:** Los manuales de `/ayuda` e `/info` han sido reescritos para reflejar todas las nuevas funcionalidades, filtros y alias.
+    -   **Alias para comandos:** Se han añadido múltiples alias para los comandos principales (ej: `/help` para `/ayuda`, `/add` para `/recordar`, `/del` para `/borrar`) para hacer el bot más flexible e intuitivo.
+    -   **Documentación actualizada:** Los manuales de `/ayuda` e `/info` han sido reescritos para reflejar todas las nuevas funcionalidades, filtros y alias.
 
 #### 🐛 Problemas resueltos
 
