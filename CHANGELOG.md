@@ -6,7 +6,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
-### [v1.8.2] - 2025-11-29
+### [v1.8.2-ux-improv] - 2025-11-29
 
 #### ✨ Mejoras
 
@@ -29,7 +29,7 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
     -   **Problema:** Cuando se borraba un recordatorio que tenía un aviso previo programado, solo se cancelaba el aviso principal. El aviso previo permanecía activo en el scheduler como un "aviso fantasma" y sonaba igualmente a su hora programada.
     -   **Solución:** Se ha corregido un error de tipeo en la función `cancel_alerts`. Ahora, al borrar un recordatorio, se cancelan de forma fiable tanto el aviso principal como cualquier aviso previo asociado.
 
-### [v1.8.1.2] - 2025-11-19
+### [v1.8.1-refactor-eng] - 2025-11-19
 
 #### ✨ Mejoras
 
