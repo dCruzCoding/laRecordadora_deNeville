@@ -152,7 +152,7 @@ def cancel_alerts(reminder_id: str):
     else:
         # Si no, es un recordatorio normal. Buscamos sus dos posibles jobs.
         jobs_ids_to_find.append(f"reminder_{reminder_id}")
-        jobs_ids_to_find.append(f"alert_{reminder_id}")
+        jobs_ids_to_find.append(f"pre_alert_{reminder_id}")
     for job_id in jobs_ids_to_find:
         try:
             # Comprobamos si el job existe antes de intentar borrarlo

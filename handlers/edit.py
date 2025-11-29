@@ -32,8 +32,7 @@ from alerts import cancel_alerts, schedule_alerts
 from personality import get_text
 
 # --- DEFINICIÓN DE ESTADOS ---
-CHOOSE_ID, CHOOSE_OPTION, EDIT_REMINDER, EDIT_ALERT = range(4)
-
+CHOOSE_ID, CHOOSE_OPTION, EDIT_REMINDER, EDIT_ALERT, EDIT_ALL_ASK_ALERT = range(5)
 
 
 # =============================================================================
@@ -107,8 +106,11 @@ async def _process_id_and_advance(update: Update, context: ContextTypes.DEFAULT_
         date_str = date_local.strftime("%d %b, %H:%M")
 
     keyboard = [
-        [InlineKeyboardButton("📝 Contenido (Fecha/Texto)", callback_data="edit_content")],
-        [InlineKeyboardButton("⏳ Aviso Previo", callback_data="edit_alert")],
+        [
+            InlineKeyboardButton("📝 Contenido", callback_data="edit_content"),
+            InlineKeyboardButton("⏳ Aviso Previo", callback_data="edit_alert")
+        ],
+        [InlineKeyboardButton("✍️ Todo (Contenido y Aviso)", callback_data="edit_all")],
         [InlineKeyboardButton("<< Volver a la lista", callback_data="edit_back_to_list")]
     ]
     
@@ -133,7 +135,7 @@ async def edit_back_to_list(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
 
 # =============================================================================
-# SECCIÓN 2: RAMA DE EDICIÓN DE "CONTENIDO"
+# SECCIÓN 2: RAMA DE EDICIÓN DE "CONTENIDO" (y primer paso de "MODIFICAR TODO")
 # =============================================================================
 
 async def ask_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -156,41 +158,55 @@ async def ask_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 
 async def save_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Guarda el nuevo contenido, reprograma el aviso (si lo tenía) y finaliza."""
+    """
+    Guarda el nuevo contenido. Si es el flujo "Todo", continúa pidiendo el aviso.
+    Si no, finaliza la conversación.
+    """
     info = context.user_data.get("editar_info")
     if not info: return ConversationHandler.END
 
     chat_id = update.effective_chat.id
     user_tz = get_config(chat_id, "user_timezone") or 'UTC'
     
-    text, datetime, error = parse_reminder(update.message.text, user_timezone=user_tz)
+    text, dt, error = parse_reminder(update.message.text, user_timezone=user_tz)
     
     if error:
         await update.message.reply_text(get_text("error_formato"))
         return EDIT_REMINDER
 
-    update_reminder_content(chat_id, info["global_id"], text, datetime, user_tz)
-
-
-    # Reprogramamos los avisos usando el 'aviso_previo' que ya estaba guardado.
-    cancel_alerts(str(info["global_id"]))
-    pre_alert = info.get("pre_alert", 0)
-    if datetime and pre_alert is not None:
-        await schedule_alerts(chat_id, str(info["global_id"]), info["user_id"], text, datetime, pre_alert)
+    if context.user_data.get('edit_flow') == 'all':
+        # Guardamos temporalmente los nuevos datos y pasamos a pedir el aviso.
+        context.user_data['new_text'] = text
+        context.user_data['new_datetime'] = dt
         
-    if datetime:
-        # Convertimos la fecha UTC a la zona horaria local del usuario ANTES de formatearla.
-        date_local = convert_utc_to_local(datetime, user_tz)
-        date_str = date_local.strftime("%d %b, %H:%M")
+        # Reutilizamos el mensaje de `ask_new_alert` pero enviándolo como un nuevo mensaje
+        current_alert_min = info.get("pre_alert", 0)
+        time_str = "ninguno"
+        if current_alert_min and current_alert_min > 0:
+            hours, mins = divmod(current_alert_min, 60)
+            time_str = f"{hours}h" if mins == 0 else f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+        
+        message = get_text("editar_pide_aviso_nuevo", current_alert=time_str)
+        await update.message.reply_text(text=message, parse_mode="Markdown")
+        return EDIT_ALL_ASK_ALERT
     else:
+        # Flujo original: solo se editó el contenido.
+        update_reminder_content(chat_id, info["global_id"], text, dt, user_tz)
+        cancel_alerts(str(info["global_id"]))
+        pre_alert = info.get("pre_alert", 0)
+        if dt and pre_alert is not None:
+            await schedule_alerts(chat_id, str(info["global_id"]), info["user_id"], text, dt, pre_alert)
+            
         date_str = "Sin fecha"
+        if dt:
+            date_local = convert_utc_to_local(dt, user_tz)
+            date_str = date_local.strftime("%d %b, %H:%M")
+            
+        message = get_text("editar_confirmacion_recordatorio", user_id=info["user_id"], text=text, date=date_str)
+        await update.message.reply_text(message, parse_mode="Markdown")
         
-    message = get_text("editar_confirmacion_recordatorio", user_id=info["user_id"], text=text, date=date_str)
-    await update.message.reply_text(message, parse_mode="Markdown")
-    
-    context.user_data.clear()
-    return ConversationHandler.END
-
+        context.user_data.clear()
+        return ConversationHandler.END
 
 
 # =============================================================================
@@ -198,47 +214,30 @@ async def save_new_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 # =============================================================================
 
 async def ask_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """
-    Pide al usuario el nuevo tiempo de aviso previo, PERO PRIMERO VALIDA
-    si el recordatorio puede tener un aviso.
-    """
+    """Pide al usuario el nuevo tiempo de aviso previo, validando si es posible."""
     query = update.callback_query
     await query.answer()
     info = context.user_data.get("editar_info", {})
     chat_id = update.effective_chat.id
 
-
-    # --- LÓGICA DE VALIDACIÓN ---
-    # 1. Obtenemos el estado actual desde la base de datos para estar seguros.
     current_reminder = get_reminder_status_for_validation(chat_id, info.get("global_id"))
-    
     if current_reminder:
         current_status, current_datetime_utc = current_reminder
-        
-        # 2. Comprobamos si el recordatorio está hecho (estado 1).
-        if current_status == 1:
-            await context.bot.send_message(chat_id=chat_id, text=get_text("error_aviso_no_permitido"))
-            # Devolvemos al usuario al menú anterior (elegir opción)
-            return CHOOSE_OPTION
-            
-        # 3. Comprobamos si la fecha ya ha pasado.
-        if current_datetime_utc:
-            if current_datetime_utc < datetime.now(pytz.utc):
-                await context.bot.send_message(chat_id=chat_id, text=get_text("error_aviso_no_permitido"))
-                return CHOOSE_OPTION
+        if current_status == 1 or (current_datetime_utc and current_datetime_utc < datetime.now(pytz.utc)):
+            # Usamos edit_message_text para reemplazar el menú, ya que venimos de un botón
+            await query.edit_message_text(text=get_text("error_aviso_no_permitido"))
+            # Finalizamos la conversación aquí, ya que no hay más pasos posibles
+            return ConversationHandler.END
 
-    # Si pasa todas las validaciones, continuamos con el flujo normal.
     current_alert_min = info.get("pre_alert", 0)
+    time_str = "ninguno"
     if current_alert_min and current_alert_min > 0:
         hours, mins = divmod(current_alert_min, 60)
         time_str = f"{hours}h" if mins == 0 else f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
-    else:
-        time_str = "ninguno"
         
     message = get_text("editar_pide_aviso_nuevo", current_alert=time_str)
-    await query.edit_message_text(text=message , parse_mode="Markdown")
+    await query.edit_message_text(text=message, parse_mode="Markdown")
     return EDIT_ALERT
-
 
 async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Guarda el nuevo aviso, valida la fecha y reprograma."""
@@ -251,21 +250,16 @@ async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return EDIT_ALERT
     
     chat_id = update.effective_chat.id
-    confirmation_message = ""
-
     if minutes == 0:
         update_reminder_pre_alert(chat_id, info["global_id"], 0)
-
-        cancel_alerts(str(info["global_id"]))
+        cancel_alerts(str(info["global_id"])) # Solo cancelamos el aviso previo
         confirmation_message = get_text("editar_confirmacion_aviso", user_id=info["user_id"], new_alert="ninguno")
-    
     elif not info.get("datetime_utc"):
         await update.message.reply_text(get_text("error_aviso_sin_fecha"))
         return EDIT_ALERT
-    
     else:
         alert_was_scheduled = await schedule_alerts(
-            update.effective_chat.id, str(info["global_id"]), info["user_id"], info["text"], info["datetime_utc"], minutes
+            chat_id, str(info["global_id"]), info["user_id"], info["text"], info["datetime_utc"], minutes
         )
         if alert_was_scheduled:
             update_reminder_pre_alert(chat_id, info["global_id"], minutes)
@@ -279,6 +273,64 @@ async def save_new_alert(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text(confirmation_message, parse_mode="Markdown")
     context.user_data.clear()
     return ConversationHandler.END
+
+
+# =============================================================================
+# SECCIÓN 4: NUEVO FLUJO COMPLETO DE EDICIÓN "MODIFICAR TODO"
+# =============================================================================
+
+async def ask_edit_all(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Inicia el flujo para editar todo, marcando el contexto y llamando al primer paso."""
+    context.user_data['edit_flow'] = 'all'
+    # Reutilizamos la función que pide el contenido del recordatorio
+    return await ask_new_reminder(update, context)
+
+async def save_all_changes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Paso final del flujo "Todo". Guarda el aviso y todos los cambios anteriores."""
+    info = context.user_data.get("editar_info")
+    if not info: return ConversationHandler.END
+
+    minutes = parse_time_to_minutes(update.message.text)
+    if minutes is None:
+        await update.message.reply_text(get_text("error_aviso_invalido"))
+        return EDIT_ALL_ASK_ALERT
+
+    chat_id = update.effective_chat.id
+    new_text = context.user_data.get('new_text')
+    new_datetime = context.user_data.get('new_datetime')
+    user_tz = get_config(chat_id, "user_timezone") or 'UTC'
+
+    # Guardamos ambos cambios en la base de datos
+    update_reminder_content(chat_id, info["global_id"], new_text, new_datetime, user_tz)
+    update_reminder_pre_alert(chat_id, info["global_id"], minutes)
+
+    # Reprogramamos todo desde cero
+    cancel_alerts(str(info["global_id"]))
+    if new_datetime and minutes is not None:
+        await schedule_alerts(chat_id, str(info["global_id"]), info["user_id"], new_text, new_datetime, minutes)
+
+    # Mensaje de confirmación final
+    date_str = "Sin fecha"
+    if new_datetime:
+        date_local = convert_utc_to_local(new_datetime, user_tz)
+        date_str = date_local.strftime("%d %b, %H:%M")
+        
+    alert_str = "ninguno"
+    if minutes > 0:
+        hours, mins = divmod(minutes, 60)
+        alert_str = f"{hours}h" if mins == 0 else f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+
+    await update.message.reply_text(
+        f"✅ ¡Todo actualizado para `#{info['user_id']}`!\n\n"
+        f"📝 Nuevo contenido: *{new_text}*\n"
+        f"🗓️ Nueva fecha: *{date_str}*\n"
+        f"⏳ Nuevo aviso previo: *{alert_str}*",
+        parse_mode="Markdown"
+    )
+    
+    context.user_data.clear()
+    return ConversationHandler.END
+
 
 # =============================================================================
 # CONVERSATION HANDLER
@@ -299,10 +351,12 @@ edit_handler = ConversationHandler(
         CHOOSE_OPTION: [
             CallbackQueryHandler(ask_new_reminder, pattern="^edit_content$"),
             CallbackQueryHandler(ask_new_alert, pattern="^edit_alert$"),
+            CallbackQueryHandler(ask_edit_all, pattern="^edit_all$"),
             CallbackQueryHandler(edit_back_to_list, pattern="^edit_back_to_list$"),
         ],
         EDIT_REMINDER: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_new_reminder)],
         EDIT_ALERT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_new_alert)],
+        EDIT_ALL_ASK_ALERT: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_all_changes)],
     },
     fallbacks=[
         list_cancel_handler,

@@ -416,7 +416,7 @@ pinned_handler = ConversationHandler(
         # Los atajos directos usando filtros Regex
         MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:añadir|add)\s*$') & filters.COMMAND, pinned_add_entry),
         MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:editar|edit)\s*$') & filters.COMMAND, pinned_edit_entry),
-        MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:borrar|delete)\s*$') & filters.COMMAND, pinned_delete_entry),
+        MessageHandler(filters.Regex(r'^\/(?:fijo|fijos|recurrente|recurrentes|pinned)\s+(?:borrar|delete|del)\s*$') & filters.COMMAND, pinned_delete_entry),
 
         # Handler general
         CommandHandler(['fijo', 'fijos', 'recurrente', 'recurrentes', 'pinned'], pinned_cmd),

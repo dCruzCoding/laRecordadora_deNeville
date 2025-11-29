@@ -53,7 +53,7 @@ async def handle_snooze_or_done(update: Update, context: ContextTypes.DEFAULT_TY
 
     # --- 3. Lógica específica para cada acción ---
     if action == "mark_done":   # Acción: Marcar como Hecho.
-        mark_reminder_as_done(rid, chat_id)
+        mark_reminder_as_done(chat_id, int(rid))
         cancel_alerts(rid) # Cancelamos cualquier job futuro que pudiera quedar.
         await query.edit_message_text(text=f"✅ ¡Bien hecho! Has completado: _{text}_", parse_mode="Markdown")
 

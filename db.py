@@ -116,6 +116,9 @@ def add_reminder(chat_id: int, text: str, date_iso: str | None, timezone: str) -
 # --- READ (GETTERS) ---   
 
 def get_reminders(chat_id: int, filter_type: str = "future", page: int = 1, items_per_page: int = 7) -> Tuple[List, int]:
+    """
+    Obtiene una lista paginada de recordatorios para un chat, con filtros y ordenación.
+    """
     now_utc = datetime.now(pytz.utc)
 
     with get_connection() as conn:
@@ -124,11 +127,14 @@ def get_reminders(chat_id: int, filter_type: str = "future", page: int = 1, item
             cursor.execute("SET LOCAL app.current_chat_id = %s", (str(chat_id),))
             query_base = "FROM reminders WHERE chat_id = %s"
             params = [chat_id]
+            order_clause = "ORDER BY datetime ASC"
 
             # AÑADIMOS LOS FILTROS POR ESTADO
             if filter_type == "done":
                 query_base += " AND status = 1"
+                order_clause = "ORDER BY datetime DESC"
                 # No se añaden más parámetros
+
             elif filter_type == "pending":
                 query_base += " AND status = 0"
 
@@ -136,9 +142,12 @@ def get_reminders(chat_id: int, filter_type: str = "future", page: int = 1, item
             if filter_type == "future":
                 query_base += " AND (datetime IS NULL OR datetime > %s)"
                 params.append(now_utc) # psycopg2 maneja objetos datetime directamente
+
             elif filter_type == "past":
                 query_base += " AND datetime IS NOT NULL AND datetime <= %s"
                 params.append(now_utc)
+                order_clause = "ORDER BY datetime DESC"
+
             elif filter_type == "today":
                 user_tz_str = get_config(chat_id, "user_timezone") or "UTC"
                 user_tz = pytz.timezone(user_tz_str)
@@ -152,7 +161,8 @@ def get_reminders(chat_id: int, filter_type: str = "future", page: int = 1, item
                 
                 query_base += " AND status = 0 AND datetime >= %s AND datetime <= %s"
                 params.extend([start_of_day_utc, end_of_day_utc])
-
+            
+            # --- EJECUTAR CONSULTAS ---
             cursor.execute(f"SELECT COUNT(id) {query_base}", tuple(params))
             total_items = cursor.fetchone()[0]
 
@@ -161,14 +171,9 @@ def get_reminders(chat_id: int, filter_type: str = "future", page: int = 1, item
 
             offset = (page - 1) * items_per_page
             query_select = "SELECT id, user_id, chat_id, text, datetime, status, pre_alert, timezone"
-            query_order = "ORDER BY datetime ASC"
-
-            # Si filtramos por estado, tiene más sentido ordenar por fecha de más reciente a más antiguo.
-            if filter_type in ["done", "pending"]:
-                query_order = "ORDER BY datetime DESC"
             
-            cursor.execute(f"{query_select} {query_base} {query_order} LIMIT %s OFFSET %s", tuple(params + [items_per_page, offset]))
-            reminders_page = cursor.fetchall()
+            cursor.execute(f"{query_select} {query_base} {order_clause} LIMIT %s OFFSET %s", tuple(params + [items_per_page, offset]))
+            reminders_page = cursor.fetchall()  
 
             return reminders_page, total_items
 

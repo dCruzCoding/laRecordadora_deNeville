@@ -6,6 +6,29 @@ Este documento registra los cambios significativos, decisiones de diseño y prob
 
 ## [v1.8-pinned-reminders] - Implementación de Recordatorios Fijos
 
+### [v1.8.2] - 2025-11-29
+
+#### ✨ Mejoras
+
+-   **Flujo de edición completo para recordatorios:** Se ha mejorado significativamente el comando `/editar`.
+    -   Se ha añadido una nueva opción **"✍️ Todo (Contenido y Aviso)"** que permite modificar tanto el texto y la fecha como el tiempo de aviso previo en un único flujo, agilizando la gestión de los recordatorios.
+    -   Se ha reorganizado el menú de edición para una mayor claridad, presentando las opciones en un formato más intuitivo.
+
+-   **Ordenación cronológica inteligente de las listas:** Todas las listas de recordatorios ahora se muestran en un orden más lógico y útil.
+    -   Los recordatorios **futuros** y **pendientes** se ordenan de más próximos a más lejanos.
+    -   Los recordatorios **pasados** y **hechos** se muestran de más recientes a más antiguos.
+    -   Los recordatorios **fijos** se ordenan por su hora de aviso a lo largo del día.
+
+#### 🐛 Problemas resueltos
+
+-   **_E025_ - El botón 'Hecho' en las notificaciones no actualizaba el estado:**
+    -   **Problema:** Al pulsar el botón "✅ Hecho" en un aviso, el mensaje de notificación se actualizaba correctamente, pero el recordatorio no se marcaba como completado en la base de datos y seguía apareciendo como pendiente en las listas.
+    -   **Solución:** Se corrigió un error en el orden de los argumentos al llamar a la función `mark_reminder_as_done` desde el handler de notificaciones, asegurando que el estado del recordatorio se actualice correctamente.
+
+-   **_E024_ - Al borrar un recordatorio, el aviso previo no se cancelaba:**
+    -   **Problema:** Cuando se borraba un recordatorio que tenía un aviso previo programado, solo se cancelaba el aviso principal. El aviso previo permanecía activo en el scheduler como un "aviso fantasma" y sonaba igualmente a su hora programada.
+    -   **Solución:** Se ha corregido un error de tipeo en la función `cancel_alerts`. Ahora, al borrar un recordatorio, se cancelan de forma fiable tanto el aviso principal como cualquier aviso previo asociado.
+
 ### [v1.8.1.2] - 2025-11-19
 
 #### ✨ Mejoras
