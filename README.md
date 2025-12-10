@@ -104,3 +104,9 @@ git checkout tags/v1.0-local
 
 -   **Estadísticas de Usuario**: Un comando que muestre un resumen de tareas completadas.
 -   **(Largo Plazo) Explorar Alternativas a Render**: Tras probar y descartar arquitecturas *serverless* (como GCP Cloud Functions) por su incompatibilidad fundamental con componentes con estado (`ConversationHandler`, `APScheduler`), se explorará en el futuro el despliegue en **Fly.io**. Su generoso plan gratuito permite ejecutar procesos persistentes 24/7, lo que lo convierte en un candidato ideal para una solución de alojamiento gratuita y más robusta.
+
+## 📜 Licencia
+
+Copyright (c) 2025 dCruzCoding.
+
+Este proyecto está distribuido bajo los términos de la **Licencia MIT**. Para más detalles, puedes consultar el archivo [LICENSE](LICENSE) en este repositorio.
